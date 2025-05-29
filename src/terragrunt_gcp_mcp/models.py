@@ -208,8 +208,12 @@ class CostAnalysis(BaseModel):
     period: str  # e.g., "monthly", "daily"
     breakdown_by_service: Dict[str, float] = Field(default_factory=dict)
     breakdown_by_environment: Dict[str, float] = Field(default_factory=dict)
+    breakdown_by_resource: Dict[str, float] = Field(default_factory=dict)
     trends: List[Dict[str, Any]] = Field(default_factory=list)
     last_updated: datetime
+    forecast: Optional[Dict[str, Any]] = None
+    recommendations: List[Dict[str, Any]] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AuditLogEntry(BaseModel):

@@ -1,25 +1,52 @@
-# Example configuration for Terragrunt GCP MCP Tool
-# Copy this file to config.yaml and update with your settings
+# Configuration for Terragrunt GCP MCP Tool
 
 # GCP Configuration
 gcp:
   project_id: "bf-100-dev"
-  credentials_path: "$HOME/Documents/bf-100-dev-694ee8483dfc.json"  # Optional, can use ADC instead
+  credentials_path: "$HOME/Documents/bf-100-dev-694ee8483dfc.json"
   default_region: "europe-west2"
   default_zone: "europe-west2-a"
 
 # Terragrunt Configuration
 terragrunt:
-  root_path: "/Users/spol/Desktop/GIT/BF/tg-gcp-infra-live"  # Path to your terragrunt infrastructure
+  root_path: "/Users/spol/Desktop/GIT/BF/tg-gcp-infra-live"
   binary_path: "terragrunt"  # Path to terragrunt binary
   terraform_binary: "tofu"   # OpenTofu binary
   cache_dir: ".terragrunt-cache"
   parallelism: 10
   timeout: 3600  # 1 hour timeout
+  
+  # New CLI redesign settings
+  backend_bootstrap: true     # Enable automatic backend resource provisioning
+  non_interactive: true       # Run in non-interactive mode (uses TG_NON_INTERACTIVE)
+  use_run_command: true       # Use 'run' command prefix for operations
+  
+  # Advanced settings
+  max_retries: 3              # Maximum retries for failed operations
+  retry_delay: 5              # Delay between retries in seconds
+  
+  # Experimental features configuration
+  experimental:
+    # Stacks feature (experimental)
+    stacks_enabled: true                    # Enable Terragrunt stacks experimental feature
+    enhanced_dependency_resolution: true    # Use enhanced dependency resolution
+    parallel_execution: true                # Enable parallel execution within stacks
+    stack_outputs: true                     # Enable stack-level outputs
+    recursive_stacks: false                 # Enable recursive stacks (not yet stable)
+    
+    # Stack execution settings
+    max_parallel_units: 10                  # Maximum number of units to execute in parallel
+    stack_timeout: 7200                     # Timeout for stack operations in seconds (2 hours)
+    continue_on_error: false                # Continue stack execution on unit errors
+    
+    # Advanced experimental features
+    auto_retry: true                        # Automatically retry failed units
+    max_retries: 3                          # Maximum number of retries for failed units
+    retry_delay: 30                         # Delay between retries in seconds
 
 # Slack Configuration (optional)
 slack:
-  webhook_url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+  webhook_url: null
   default_channel: "#infrastructure"
   username: "Terragrunt Bot"
   icon_emoji: ":terraform:"
@@ -33,6 +60,7 @@ monitoring:
     cost_increase_percent: 20.0
     deployment_duration_minutes: 30.0
     error_rate_percent: 5.0
+    stack_failure_rate_percent: 10.0  # New threshold for stack failures
 
 # Logging Configuration
 logging:

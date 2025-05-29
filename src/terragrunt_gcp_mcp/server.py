@@ -26,6 +26,7 @@ from .models import (
 )
 from .terragrunt_manager import TerragruntManager
 from .stack_manager import StackManager
+from .cost_manager import CostManager
 from .utils import setup_logging
 
 
@@ -40,6 +41,7 @@ class TerragruntGCPMCPServer:
         self.config = Config.load_from_file(config_path)
         self.terragrunt_manager = TerragruntManager(self.config)
         self.stack_manager = StackManager(self.config)
+        self.cost_manager = CostManager(self.config)
         
         # Set up logging
         setup_logging(
@@ -732,6 +734,320 @@ class TerragruntGCPMCPServer:
                 return MCPToolResult(
                     success=False,
                     message="Failed to visualize infrastructure",
+                    error_details=str(e)
+                )
+
+        # Add other existing tools here for backward compatibility...
+        # (validate_resource_config, plan_resource_deployment, apply_resource_deployment, etc.)
+
+        @self.app.tool()
+        async def get_autodevops_system_prompt(
+            variant: str = "compact",
+            format: str = "text"
+        ) -> MCPToolResult:
+            """Get AutoDevOps system prompt for LLM integration.
+            
+            Args:
+                variant: Prompt variant ("compact", "extended", "cli")
+                format: Output format ("text", "json", "context")
+            """
+            try:
+                from .autodevops_prompt import get_system_prompt, create_autodevops_context
+                
+                if format == "context":
+                    # Return full context information
+                    context = create_autodevops_context()
+                    context["system_prompt"] = get_system_prompt(variant)
+                    
+                    return MCPToolResult(
+                        success=True,
+                        message=f"Retrieved AutoDevOps context with {variant} prompt",
+                        data={
+                            "context": context,
+                            "variant": variant,
+                            "usage": "Inject this into LLM conversations for AutoDevOps assistance"
+                        }
+                    )
+                
+                elif format == "json":
+                    # Return structured JSON
+                    return MCPToolResult(
+                        success=True,
+                        message=f"Retrieved AutoDevOps {variant} system prompt",
+                        data={
+                            "system_prompt": get_system_prompt(variant),
+                            "variant": variant,
+                            "role": "system",
+                            "purpose": "AutoDevOps Infrastructure Assistant",
+                            "integration_guide": {
+                                "claude_desktop": "Add this prompt to your Claude Desktop configuration",
+                                "api": "Include as system message in API calls",
+                                "cli": "Use with --system-prompt flag in CLI tools"
+                            }
+                        }
+                    )
+                
+                else:  # text format
+                    prompt = get_system_prompt(variant)
+                    
+                    return MCPToolResult(
+                        success=True,
+                        message=f"Retrieved AutoDevOps {variant} system prompt",
+                        data={
+                            "system_prompt": prompt,
+                            "variant": variant,
+                            "character_count": len(prompt),
+                            "word_count": len(prompt.split())
+                        }
+                    )
+                
+            except Exception as e:
+                logger.error(f"Failed to get AutoDevOps system prompt: {e}")
+                return MCPToolResult(
+                    success=False,
+                    message="Failed to get AutoDevOps system prompt",
+                    error_details=str(e)
+                )
+
+        # Cost Management Tools
+        @self.app.tool()
+        async def get_cost_analysis(
+            environment: Optional[str] = None,
+            period_days: int = 30,
+            include_forecasting: bool = True,
+            include_recommendations: bool = True
+        ) -> MCPToolResult:
+            """Get comprehensive cost analysis for infrastructure.
+            
+            Args:
+                environment: Filter by environment (optional)
+                period_days: Analysis period in days (default: 30)
+                include_forecasting: Include cost forecasting (default: True)
+                include_recommendations: Include optimization recommendations (default: True)
+            """
+            try:
+                start_time = datetime.now()
+                
+                cost_analysis = await self.cost_manager.get_cost_analysis(
+                    environment=environment,
+                    period_days=period_days,
+                    include_forecasting=include_forecasting,
+                    include_recommendations=include_recommendations
+                )
+                
+                execution_time = (datetime.now() - start_time).total_seconds()
+                
+                return MCPToolResult(
+                    success=True,
+                    message=f"Cost analysis completed for {environment or 'all environments'} ({period_days} days)",
+                    data={
+                        "cost_analysis": {
+                            "total_cost": cost_analysis.total_cost,
+                            "currency": cost_analysis.currency,
+                            "period": cost_analysis.period,
+                            "breakdown_by_service": cost_analysis.breakdown_by_service,
+                            "breakdown_by_environment": cost_analysis.breakdown_by_environment,
+                            "breakdown_by_resource": cost_analysis.breakdown_by_resource,
+                            "trends": cost_analysis.trends,
+                            "forecast": cost_analysis.forecast,
+                            "recommendations": cost_analysis.recommendations,
+                            "last_updated": cost_analysis.last_updated.isoformat(),
+                            "metadata": cost_analysis.metadata
+                        },
+                        "summary": {
+                            "total_cost": cost_analysis.total_cost,
+                            "top_services": sorted(
+                                cost_analysis.breakdown_by_service.items(), 
+                                key=lambda x: x[1], 
+                                reverse=True
+                            )[:5],
+                            "recommendations_count": len(cost_analysis.recommendations),
+                            "has_forecast": cost_analysis.forecast is not None
+                        }
+                    },
+                    execution_time=execution_time
+                )
+                
+            except Exception as e:
+                logger.error(f"Failed to get cost analysis: {e}")
+                return MCPToolResult(
+                    success=False,
+                    message="Failed to get cost analysis",
+                    error_details=str(e)
+                )
+
+        @self.app.tool()
+        async def get_cost_alerts(
+            threshold_percentage: float = 80.0
+        ) -> MCPToolResult:
+            """Get cost alerts based on budget thresholds and unusual spending patterns.
+            
+            Args:
+                threshold_percentage: Budget threshold percentage for alerts (default: 80.0)
+            """
+            try:
+                start_time = datetime.now()
+                
+                alerts = await self.cost_manager.get_cost_alerts(threshold_percentage)
+                
+                execution_time = (datetime.now() - start_time).total_seconds()
+                
+                # Categorize alerts by severity
+                high_severity = [alert for alert in alerts if alert.get("severity") == "high"]
+                medium_severity = [alert for alert in alerts if alert.get("severity") == "medium"]
+                low_severity = [alert for alert in alerts if alert.get("severity") == "low"]
+                
+                return MCPToolResult(
+                    success=True,
+                    message=f"Found {len(alerts)} cost alerts",
+                    data={
+                        "alerts": alerts,
+                        "summary": {
+                            "total_alerts": len(alerts),
+                            "high_severity": len(high_severity),
+                            "medium_severity": len(medium_severity),
+                            "low_severity": len(low_severity),
+                            "threshold_percentage": threshold_percentage
+                        },
+                        "categorized_alerts": {
+                            "high": high_severity,
+                            "medium": medium_severity,
+                            "low": low_severity
+                        }
+                    },
+                    execution_time=execution_time
+                )
+                
+            except Exception as e:
+                logger.error(f"Failed to get cost alerts: {e}")
+                return MCPToolResult(
+                    success=False,
+                    message="Failed to get cost alerts",
+                    error_details=str(e)
+                )
+
+        @self.app.tool()
+        async def get_cost_optimization_score() -> MCPToolResult:
+            """Get cost optimization score for the infrastructure."""
+            try:
+                start_time = datetime.now()
+                
+                optimization_score = await self.cost_manager.get_cost_optimization_score()
+                
+                execution_time = (datetime.now() - start_time).total_seconds()
+                
+                return MCPToolResult(
+                    success=True,
+                    message=f"Cost optimization score: {optimization_score['grade']} ({optimization_score['score']:.1f}/100)",
+                    data={
+                        "optimization_score": optimization_score,
+                        "interpretation": {
+                            "grade": optimization_score["grade"],
+                            "score": optimization_score["score"],
+                            "status": "excellent" if optimization_score["score"] >= 90 
+                                     else "good" if optimization_score["score"] >= 80
+                                     else "fair" if optimization_score["score"] >= 70
+                                     else "poor",
+                            "recommendations_needed": optimization_score.get("recommendations_count", 0) > 0
+                        }
+                    },
+                    execution_time=execution_time
+                )
+                
+            except Exception as e:
+                logger.error(f"Failed to get cost optimization score: {e}")
+                return MCPToolResult(
+                    success=False,
+                    message="Failed to get cost optimization score",
+                    error_details=str(e)
+                )
+
+        @self.app.tool()
+        async def get_cost_status(
+            environment: Optional[str] = None,
+            include_alerts: bool = True,
+            include_optimization_score: bool = True
+        ) -> MCPToolResult:
+            """Get comprehensive cost status including analysis, alerts, and optimization score.
+            
+            Args:
+                environment: Filter by environment (optional)
+                include_alerts: Include cost alerts (default: True)
+                include_optimization_score: Include optimization score (default: True)
+            """
+            try:
+                start_time = datetime.now()
+                
+                # Get cost analysis
+                cost_analysis = await self.cost_manager.get_cost_analysis(
+                    environment=environment,
+                    period_days=30,
+                    include_forecasting=True,
+                    include_recommendations=True
+                )
+                
+                status_data = {
+                    "cost_summary": {
+                        "total_cost": cost_analysis.total_cost,
+                        "currency": cost_analysis.currency,
+                        "period": cost_analysis.period,
+                        "environment_filter": environment,
+                        "last_updated": cost_analysis.last_updated.isoformat()
+                    },
+                    "service_breakdown": cost_analysis.breakdown_by_service,
+                    "environment_breakdown": cost_analysis.breakdown_by_environment,
+                    "trends": cost_analysis.trends[-7:] if cost_analysis.trends else [],  # Last 7 days
+                    "forecast": cost_analysis.forecast,
+                    "recommendations": cost_analysis.recommendations
+                }
+                
+                # Add alerts if requested
+                if include_alerts:
+                    alerts = await self.cost_manager.get_cost_alerts()
+                    status_data["alerts"] = {
+                        "total_count": len(alerts),
+                        "alerts": alerts,
+                        "has_critical_alerts": any(alert.get("severity") == "high" for alert in alerts)
+                    }
+                
+                # Add optimization score if requested
+                if include_optimization_score:
+                    optimization_score = await self.cost_manager.get_cost_optimization_score()
+                    status_data["optimization"] = optimization_score
+                
+                execution_time = (datetime.now() - start_time).total_seconds()
+                
+                # Determine overall status
+                overall_status = "healthy"
+                if include_alerts and status_data.get("alerts", {}).get("has_critical_alerts"):
+                    overall_status = "critical"
+                elif include_optimization_score and optimization_score.get("score", 100) < 70:
+                    overall_status = "needs_attention"
+                elif cost_analysis.total_cost == 0:
+                    overall_status = "no_data"
+                
+                return MCPToolResult(
+                    success=True,
+                    message=f"Cost status: {overall_status} - Total: ${cost_analysis.total_cost:.2f}",
+                    data={
+                        "overall_status": overall_status,
+                        "cost_status": status_data,
+                        "summary": {
+                            "total_cost": cost_analysis.total_cost,
+                            "top_service": max(cost_analysis.breakdown_by_service.items(), key=lambda x: x[1])[0] if cost_analysis.breakdown_by_service else "none",
+                            "alerts_count": len(status_data.get("alerts", {}).get("alerts", [])),
+                            "recommendations_count": len(cost_analysis.recommendations),
+                            "optimization_grade": optimization_score.get("grade", "N/A") if include_optimization_score else "N/A"
+                        }
+                    },
+                    execution_time=execution_time
+                )
+                
+            except Exception as e:
+                logger.error(f"Failed to get cost status: {e}")
+                return MCPToolResult(
+                    success=False,
+                    message="Failed to get cost status",
                     error_details=str(e)
                 )
 

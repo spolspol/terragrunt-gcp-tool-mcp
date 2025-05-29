@@ -42,6 +42,137 @@ A Model Context Protocol (MCP) server tool for managing Google Cloud Platform in
 - **Dependency Discovery**: Enhanced dependency graph analysis with `find` and `list` commands
 - **Run All Operations**: Support for `run --all` commands across multiple units
 
+### 🤖 AutoDevOps Assistant Integration (New!)
+
+This tool now includes comprehensive system prompts for creating AutoDevOps assistants that can help manage, monitor, and maintain cloud infrastructure using all the tool's capabilities.
+
+#### Getting AutoDevOps System Prompts
+
+```bash
+# Get the compact system prompt (recommended for most use cases)
+python3 -m terragrunt_gcp_mcp.cli get-autodevops-prompt
+
+# Get the extended prompt with full details
+python3 -m terragrunt_gcp_mcp.cli get-autodevops-prompt --variant extended
+
+# Get CLI-specific prompt for automation
+python3 -m terragrunt_gcp_mcp.cli get-autodevops-prompt --variant cli
+
+# Get prompt in JSON format for API integration
+python3 -m terragrunt_gcp_mcp.cli get-autodevops-prompt --format json
+
+# Save prompt to file for integration
+python3 -m terragrunt_gcp_mcp.cli get-autodevops-prompt --output-file autodevops_prompt.txt
+
+# Get full context including capabilities and tools
+python3 -m terragrunt_gcp_mcp.cli get-autodevops-prompt --format context
+```
+
+#### MCP Tool Access
+
+```python
+# Get system prompt via MCP tool
+result = get_autodevops_system_prompt(
+    variant="compact",  # "compact", "extended", "cli"
+    format="json"       # "text", "json", "context"
+)
+
+# Use in conversation systems
+from terragrunt_gcp_mcp.autodevops_prompt import inject_system_prompt
+
+conversation = [
+    {"role": "user", "content": "Help me understand my infrastructure"}
+]
+
+# Inject AutoDevOps system prompt
+conversation_with_prompt = inject_system_prompt(conversation, variant="compact")
+```
+
+#### Claude Desktop Integration
+
+Add the AutoDevOps prompt to your Claude Desktop configuration:
+
+```json
+{
+  "mcpServers": {
+    "terragrunt-gcp-autodevops": {
+      "command": "python3",
+      "args": [
+        "/Users/spol/Desktop/GIT/INTI/terragrunt-gcp-tool-mcp/run_server.py",
+        "/Users/spol/Desktop/GIT/INTI/terragrunt-gcp-tool-mcp/config/config.yaml"
+      ],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/your/gcp-credentials.json"
+      }
+    }
+  },
+  "global": {
+    "systemPrompt": "You are an AutoDevOps Infrastructure Assistant with expert knowledge in cloud infrastructure management. You have access to the Terragrunt GCP MCP Tool with comprehensive capabilities for managing Google Cloud Platform infrastructure. ROLE: Help users manage, monitor, and maintain cloud infrastructure efficiently and safely. Always start with visualization using draw_resource_tree or visualize_infrastructure, validate before deployment with validate_resource_config, and follow GitOps best practices."
+  }
+}
+```
+
+#### API Integration Example
+
+```python
+import openai
+from terragrunt_gcp_mcp.autodevops_prompt import get_system_prompt
+
+# Initialize with AutoDevOps system prompt
+client = openai.OpenAI()
+
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[
+        {
+            "role": "system", 
+            "content": get_system_prompt("compact")
+        },
+        {
+            "role": "user", 
+            "content": "Show me the current state of our dev-99 environment and suggest optimizations"
+        }
+    ]
+)
+```
+
+#### Automation Integration
+
+```bash
+#!/bin/bash
+# Get AutoDevOps prompt for automation scripts
+PROMPT=$(python3 -m terragrunt_gcp_mcp.cli get-autodevops-prompt --variant cli --format text)
+
+# Use in CI/CD pipelines, monitoring scripts, etc.
+echo "AutoDevOps Assistant initialized with capabilities:"
+echo "$PROMPT" | grep -A 20 "Available Commands"
+```
+
+#### What the AutoDevOps Assistant Provides
+
+**Core Capabilities:**
+- 🌳 **Infrastructure Visualization**: Visual trees and dependency graphs
+- 🧪 **Experimental Stacks**: Parallel execution and enhanced dependency management  
+- 🚀 **Safe Deployments**: Validation, planning, and rollback capabilities
+- 🔧 **Resource Management**: Complete lifecycle management with safety checks
+- 📊 **Monitoring**: Health assessment and performance optimization
+- 🔐 **Security**: Compliance and audit trail management
+
+**Operational Guidelines:**
+- **Safety-First Approach**: Always validate → visualize → plan → deploy
+- **Visualization-First**: Start with tree/graph visualization before making changes
+- **GitOps Best Practices**: Version control integration and automated testing
+- **Environment Protection**: Special handling for production environments
+
+**Response Pattern:**
+1. **Current State Visualization** - Show infrastructure state with tree/graph tools
+2. **Impact Analysis** - Analyze what would change and what might be affected
+3. **Recommendations** - Provide best practices and suggested actions
+4. **Implementation Steps** - Clear, actionable steps with specific tool commands
+5. **Validation & Monitoring** - How to verify success and ongoing monitoring
+
+### 🌳 Resource Tree Visualization
+
 ## Installation
 
 ```bash
@@ -180,7 +311,21 @@ The MCP server provides these tools:
 #### Visualization & Tree Drawing (New!)
 - `draw_resource_tree` - Draw a visual resource tree using Terragrunt CLI redesign commands
 - `get_dependency_graph` - Generate dependency graphs in DOT, Mermaid, or JSON format
-- `visualize_infrastructure` - Comprehensive infrastructure visualization with multiple formats
+- `visualize_infrastructure` - Comprehensive infrastructure visualization combining trees and graphs
+
+#### AutoDevOps Assistant Integration (New!)
+- `get_autodevops_system_prompt` - Get system prompts for LLM integration to create AutoDevOps assistants
+- Support for compact, extended, and CLI-specific prompt variants
+- JSON, text, and context output formats for different integration scenarios
+- Built-in integration guides for Claude Desktop, APIs, and automation tools
+
+#### Cost Management & Analysis (New!)
+- `get_cost_analysis` - Comprehensive cost analysis with forecasting and optimization recommendations
+- `get_cost_alerts` - Cost alerts based on budget thresholds and spending patterns
+- `get_cost_optimization_score` - Infrastructure cost optimization scoring and recommendations
+- `get_cost_status` - Complete cost status dashboard with analysis, alerts, and optimization insights
+- Support for environment filtering, multiple time periods, and detailed cost breakdowns
+- Integration with Google Cloud Billing API for accurate cost data
 
 #### Deployment Operations
 - `plan_deployment` - Generate deployment plan for changes (deprecated, use plan_resource_deployment)
@@ -521,40 +666,68 @@ status = get_infrastructure_status(
 )
 ```
 
-## 🧪 Experimental Features
+### 💰 Cost Management & Analysis (New!)
 
-This tool supports Terragrunt's experimental features as documented in the [Terragrunt Experiments documentation](https://terragrunt.gruntwork.io/docs/reference/experiments/).
+Comprehensive cost analysis, monitoring, and optimization for your GCP infrastructure.
 
-### Stacks Feature
+#### CLI Usage
+```bash
+# Get comprehensive cost analysis
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml cost-analysis
 
-The **Stacks** experimental feature provides:
+# Get cost analysis for specific environment with 60-day period
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml cost-analysis --environment dev-99 --period-days 60
 
-- **Enhanced Dependency Management**: Automatic dependency resolution and execution ordering
-- **Parallel Execution**: Run multiple units in parallel within stacks
-- **Stack-Level Operations**: Execute commands across entire stacks
-- **Improved Error Handling**: Better error reporting and recovery
-- **Stack Outputs**: Aggregate outputs at the stack level
+# Get cost analysis in JSON format without forecasting
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml cost-analysis --format json --no-forecasting
 
-#### Configuration
+# Check cost alerts with custom threshold
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml cost-alerts --threshold 75.0
 
-Enable experimental features in your `config.yaml`:
+# Get cost optimization score
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml cost-optimization-score
 
-```yaml
-terragrunt:
-  experimental:
-    stacks_enabled: true                    # Enable stacks feature
-    enhanced_dependency_resolution: true    # Enhanced dependency analysis
-    parallel_execution: true                # Parallel unit execution
-    stack_outputs: true                     # Stack-level outputs
-    max_parallel_units: 10                  # Max parallel units
-    stack_timeout: 7200                     # Stack operation timeout
+# Get comprehensive cost status
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml cost-status --environment dev-99
+
+# Get cost status without optimization score
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml cost-status --no-optimization
 ```
 
-#### Stack Structure
+#### MCP Usage
+```python
+# Example: Get comprehensive cost analysis
+result = get_cost_analysis(
+    environment="dev-99",
+    period_days=30,
+    include_forecasting=True,
+    include_recommendations=True
+)
 
-Stacks are defined using `stack.hcl` files in your Terragrunt structure:
+# Example: Get cost alerts
+result = get_cost_alerts(threshold_percentage=80.0)
 
+# Example: Get cost optimization score
+result = get_cost_optimization_score()
+
+# Example: Get complete cost status
+result = get_cost_status(
+    environment="dev-99",
+    include_alerts=True,
+    include_optimization_score=True
+)
 ```
+
+#### Cost Analysis Features
+- **Service Breakdown**: Costs by GCP service (Compute, Storage, Networking, etc.)
+- **Environment Breakdown**: Costs by environment (dev, staging, production)
+- **Resource-Level Costs**: Individual resource cost tracking
+- **Cost Trends**: Historical cost data and trend analysis
+- **Forecasting**: Predictive cost modeling for budget planning
+- **Optimization Recommendations**: Actionable cost reduction suggestions
+- **Budget Alerts**: Proactive notifications for budget thresholds
+- **Optimization Scoring**: Infrastructure efficiency scoring (A-F grade)
+
 live/
 ├── dev-account/
 │   └── test-dev/

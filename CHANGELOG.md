@@ -5,6 +5,101 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2025-05-29
+
+### 💰 Added - Comprehensive Cost Management & Analysis
+- **Complete Cost Management System**: Full-featured cost analysis, monitoring, and optimization for GCP infrastructure
+  - `CostManager` class with comprehensive cost analysis capabilities
+  - Integration with Google Cloud Billing, Monitoring, Compute, and Storage APIs
+  - Real-time cost data collection and analysis
+  - Cost forecasting using trend analysis and linear regression
+  - Intelligent cost optimization recommendations
+
+- **New MCP Tools for Cost Management**:
+  - `get_cost_analysis` - Comprehensive cost analysis with service/environment/resource breakdowns
+  - `get_cost_alerts` - Proactive cost alerts based on budget thresholds and spending patterns
+  - `get_cost_optimization_score` - Infrastructure cost efficiency scoring (A-F grade system)
+  - `get_cost_status` - Complete cost dashboard combining analysis, alerts, and optimization insights
+
+- **New CLI Commands**:
+  - `cost-analysis` - Detailed cost analysis with forecasting and recommendations
+  - `cost-alerts` - Budget threshold and spending pattern alerts
+  - `cost-optimization-score` - Cost efficiency scoring and optimization factors
+  - `cost-status` - Comprehensive cost status dashboard
+
+- **Advanced Cost Features**:
+  - **Multi-dimensional Cost Breakdown**: By service, environment, and individual resources
+  - **Cost Forecasting**: 30-day and 90-day cost predictions with confidence metrics
+  - **Trend Analysis**: Historical cost data analysis with growth rate calculations
+  - **Smart Recommendations**: Actionable cost optimization suggestions with potential savings
+  - **Budget Alerts**: Configurable threshold-based alerts and anomaly detection
+  - **Optimization Scoring**: Comprehensive scoring system with detailed factor analysis
+  - **Environment Filtering**: Cost analysis by specific environments (dev, staging, production)
+  - **Multiple Output Formats**: Table and JSON formats for all cost commands
+
+### 📊 Enhanced
+- **Updated Models**: Extended `CostAnalysis` model with forecast, recommendations, and metadata fields
+- **Server Integration**: Seamless integration of cost management tools into MCP server
+- **CLI Enhancement**: Rich table formatting and colored output for cost information
+- **Documentation**: Comprehensive documentation for all cost management features
+
+### 🔧 Technical Improvements
+- **Async Cost Operations**: All cost analysis operations are fully asynchronous
+- **Error Resilience**: Graceful handling of API failures with meaningful error messages
+- **Performance Optimization**: Efficient cost calculation algorithms and data processing
+
+## [0.3.2] - 2025-05-29
+
+### 🤖 Added - AutoDevOps Assistant Integration
+- **Comprehensive System Prompts**: Created professional system prompts for LLM integration to enable AutoDevOps assistants
+  - `autodevops_prompt.py` module with compact, extended, and CLI-specific prompt variants
+  - `AUTODEVOPS_SYSTEM_PROMPT.md` with comprehensive documentation and operational guidelines
+  - Support for text, JSON, and context output formats for different integration scenarios
+
+- **New MCP Tool**:
+  - `get_autodevops_system_prompt` - Retrieve system prompts for LLM integration with multiple variants and formats
+  - Integration guides for Claude Desktop, API calls, and automation tools
+
+- **New CLI Command**:
+  - `get-autodevops-prompt` - Access system prompts from command line with options for:
+    - Variant selection (compact, extended, cli)
+    - Output format (text, json, context)
+    - File output for easy integration
+    - Built-in integration tips and examples
+
+- **Integration Capabilities**:
+  - **Claude Desktop Integration**: Ready-to-use configuration examples
+  - **API Integration**: OpenAI-compatible system message format
+  - **Automation Scripts**: CLI-friendly prompts for CI/CD pipelines
+  - **Conversation Injection**: Helper functions for adding prompts to conversation history
+
+### 📋 AutoDevOps Assistant Features
+- **Role Definition**: Expert AutoDevOps Infrastructure Assistant with comprehensive cloud management knowledge
+- **Safety-First Approach**: Built-in operational guidelines prioritizing validation and visualization
+- **Visualization-First Methodology**: Always start with infrastructure visualization before making changes
+- **Structured Response Patterns**: Consistent 5-step response format for all infrastructure operations
+- **GitOps Best Practices**: Integrated Infrastructure as Code principles and workflows
+- **Multi-Environment Support**: Specific guidance for production, staging, and development environments
+
+### 🎯 Use Cases
+- **Infrastructure Discovery**: "Show me the complete infrastructure hierarchy for dev-99 environment"
+- **Deployment Assistance**: Guided deployment with safety checks and validation
+- **Issue Investigation**: Structured troubleshooting with root cause analysis
+- **Monitoring & Optimization**: Proactive infrastructure health assessment and performance tuning
+- **Team Collaboration**: Standardized communication patterns and automated reporting
+
+### 🔧 Technical Implementation
+- Modular prompt system with easy customization and extension
+- Context-aware prompts that leverage all tool capabilities
+- Integration helpers for common LLM platforms and automation tools
+- Comprehensive documentation with real-world examples and best practices
+
+### 📖 Documentation Updates
+- Added comprehensive AutoDevOps section to README with examples
+- Integration guides for Claude Desktop, APIs, and automation
+- Best practices for prompt usage in different scenarios
+- Complete reference for all prompt variants and output formats
+
 ## [0.3.1] - 2025-05-29
 
 ### 🌳 Added - Resource Tree Visualization

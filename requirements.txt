@@ -1,24 +1,35 @@
 # Core MCP dependencies
 mcp>=0.4.0
-fastmcp>=0.2.0
+fastmcp>=2.5.0
 
 # Google Cloud dependencies
 google-cloud-core>=2.4.1
 google-cloud-storage>=2.10.0
-google-cloud-compute>=1.15.0
+google-cloud-compute>=1.14.0
 google-cloud-resource-manager>=1.10.4
-google-cloud-billing>=1.12.2
-google-cloud-monitoring>=2.16.0
+google-cloud-billing>=1.12.0
+google-cloud-monitoring>=2.15.0
 google-cloud-logging>=3.8.0
-google-auth>=2.23.4
+google-auth>=2.20.0
 
 # Core dependencies
-pyyaml>=6.0.1
+pyyaml>=6.0.0
 requests>=2.31.0
-click>=8.1.7
-rich>=13.7.0
+click>=8.0.0
+rich>=13.0.0
 python-dateutil>=2.8.2
 jinja2>=3.1.2
 gitpython>=3.1.40
 psutil>=5.9.6
-pydantic>=2.0.0 
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+python-dotenv>=1.0.0
+
+# Development dependencies
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0
+pre-commit>=3.0.0 

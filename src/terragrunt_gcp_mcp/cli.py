@@ -13,6 +13,9 @@ from rich.table import Table
 from .config import Config
 from .server import TerragruntGCPMCPServer
 from .terragrunt_manager import TerragruntManager
+from .stack_manager import StackManager
+from .cost_manager import CostManager
+from .utils import setup_logging
 
 
 console = Console()
@@ -1590,7 +1593,7 @@ def dependency_graph(ctx, environment: Optional[str], format: str):
 @click.option(
     "--include-dependencies", 
     is_flag=True, 
-    default=True,
+    default=True, 
     help="Include dependency information"
 )
 @click.pass_context
@@ -1671,6 +1674,499 @@ def visualize(ctx, environment: Optional[str], visualization_type: str, format: 
             sys.exit(1)
     
     asyncio.run(_visualize())
+
+
+@cli.command()
+@click.option(
+    "--variant", 
+    "-v",
+    type=click.Choice(["compact", "extended", "cli"]), 
+    default="compact", 
+    help="System prompt variant"
+)
+@click.option(
+    "--format", 
+    "-f", 
+    type=click.Choice(["text", "json", "context"]), 
+    default="text", 
+    help="Output format"
+)
+@click.option(
+    "--output-file", 
+    "-o", 
+    type=click.Path(), 
+    help="Save prompt to file"
+)
+@click.pass_context
+def get_autodevops_prompt(ctx, variant: str, format: str, output_file: Optional[str]):
+    """Get AutoDevOps system prompt for LLM integration."""
+    try:
+        from .autodevops_prompt import get_system_prompt, create_autodevops_context
+        
+        if format == "context":
+            # Return full context information
+            context = create_autodevops_context()
+            context["system_prompt"] = get_system_prompt(variant)
+            
+            if format == "json":
+                import json
+                output = json.dumps(context, indent=2)
+            else:
+                output = f"""AutoDevOps Assistant Context:
+Role: {context['role']}
+
+Capabilities:
+{chr(10).join(f"- {cap}" for cap in context['capabilities'])}
+
+Available Tools:
+{chr(10).join(f"- {tool}" for tool in context['tools'])}
+
+Safety Principles:
+{chr(10).join(f"- {principle}" for principle in context['safety_principles'])}
+
+System Prompt ({variant}):
+{context['system_prompt']}"""
+        
+        elif format == "json":
+            import json
+            data = {
+                "system_prompt": get_system_prompt(variant),
+                "variant": variant,
+                "role": "system",
+                "purpose": "AutoDevOps Infrastructure Assistant",
+                "integration_guide": {
+                    "claude_desktop": "Add this prompt to your Claude Desktop configuration",
+                    "api": "Include as system message in API calls",
+                    "cli": "Use with --system-prompt flag in CLI tools"
+                },
+                "character_count": len(get_system_prompt(variant)),
+                "word_count": len(get_system_prompt(variant).split())
+            }
+            output = json.dumps(data, indent=2)
+        
+        else:  # text format
+            prompt = get_system_prompt(variant)
+            output = prompt
+        
+        # Output to file or console
+        if output_file:
+            with open(output_file, 'w') as f:
+                f.write(output)
+            console.print(f"[green]✅ AutoDevOps {variant} system prompt saved to {output_file}[/green]")
+            
+            # Show stats
+            console.print(f"[cyan]Variant:[/cyan] {variant}")
+            console.print(f"[cyan]Format:[/cyan] {format}")
+            console.print(f"[cyan]Characters:[/cyan] {len(output)}")
+            console.print(f"[cyan]Words:[/cyan] {len(output.split())}")
+        else:
+            console.print(output)
+            
+        # Show integration tips
+        if not output_file:
+            console.print(f"\n[yellow]💡 Integration Tips:[/yellow]")
+            console.print(f"[blue]• Claude Desktop:[/blue] Add as system message in MCP configuration")
+            console.print(f"[blue]• API Integration:[/blue] Use as 'system' role in conversation history")
+            console.print(f"[blue]• Save to file:[/blue] --output-file prompt.txt")
+            console.print(f"[blue]• Get JSON format:[/blue] --format json")
+            
+    except Exception as e:
+        console.print(f"[red]Error getting AutoDevOps prompt: {e}[/red]")
+        sys.exit(1)
+
+    asyncio.run(_get_autodevops_prompt())
+
+
+# Cost Management Commands
+@cli.command()
+@click.option(
+    "--environment", 
+    "-e", 
+    help="Filter by environment"
+)
+@click.option(
+    "--period-days", 
+    "-p", 
+    type=int, 
+    default=30, 
+    help="Analysis period in days (default: 30)"
+)
+@click.option(
+    "--format", 
+    "-f", 
+    type=click.Choice(["table", "json"]), 
+    default="table", 
+    help="Output format"
+)
+@click.option(
+    "--include-forecasting/--no-forecasting", 
+    default=True, 
+    help="Include cost forecasting"
+)
+@click.option(
+    "--include-recommendations/--no-recommendations", 
+    default=True, 
+    help="Include optimization recommendations"
+)
+@click.pass_context
+def cost_analysis(ctx, environment: Optional[str], period_days: int, format: str, 
+                 include_forecasting: bool, include_recommendations: bool):
+    """Get comprehensive cost analysis for infrastructure."""
+    async def _cost_analysis():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            
+            cost_manager = CostManager(config)
+            
+            console.print(f"[blue]📊 Analyzing costs for {environment or 'all environments'} ({period_days} days)...[/blue]")
+            
+            cost_analysis = await cost_manager.get_cost_analysis(
+                environment=environment,
+                period_days=period_days,
+                include_forecasting=include_forecasting,
+                include_recommendations=include_recommendations
+            )
+            
+            if format == "json":
+                import json
+                output = {
+                    "total_cost": cost_analysis.total_cost,
+                    "currency": cost_analysis.currency,
+                    "period": cost_analysis.period,
+                    "breakdown_by_service": cost_analysis.breakdown_by_service,
+                    "breakdown_by_environment": cost_analysis.breakdown_by_environment,
+                    "breakdown_by_resource": cost_analysis.breakdown_by_resource,
+                    "trends": cost_analysis.trends,
+                    "forecast": cost_analysis.forecast,
+                    "recommendations": cost_analysis.recommendations,
+                    "last_updated": cost_analysis.last_updated.isoformat()
+                }
+                console.print(json.dumps(output, indent=2))
+            else:
+                # Table format
+                console.print(f"\n[bold green]💰 Cost Analysis Summary[/bold green]")
+                console.print(f"Total Cost: [bold]${cost_analysis.total_cost:.2f} {cost_analysis.currency}[/bold]")
+                console.print(f"Period: {cost_analysis.period}")
+                
+                if cost_analysis.breakdown_by_service:
+                    console.print(f"\n[bold]📋 Service Breakdown:[/bold]")
+                    service_table = Table(show_header=True, header_style="bold magenta")
+                    service_table.add_column("Service", style="cyan")
+                    service_table.add_column("Cost", justify="right", style="green")
+                    service_table.add_column("Percentage", justify="right", style="yellow")
+                    
+                    for service, cost in sorted(cost_analysis.breakdown_by_service.items(), key=lambda x: x[1], reverse=True):
+                        percentage = (cost / cost_analysis.total_cost * 100) if cost_analysis.total_cost > 0 else 0
+                        service_table.add_row(service, f"${cost:.2f}", f"{percentage:.1f}%")
+                    
+                    console.print(service_table)
+                
+                if cost_analysis.breakdown_by_environment:
+                    console.print(f"\n[bold]🌍 Environment Breakdown:[/bold]")
+                    env_table = Table(show_header=True, header_style="bold magenta")
+                    env_table.add_column("Environment", style="cyan")
+                    env_table.add_column("Cost", justify="right", style="green")
+                    env_table.add_column("Percentage", justify="right", style="yellow")
+                    
+                    for env, cost in sorted(cost_analysis.breakdown_by_environment.items(), key=lambda x: x[1], reverse=True):
+                        percentage = (cost / cost_analysis.total_cost * 100) if cost_analysis.total_cost > 0 else 0
+                        env_table.add_row(env, f"${cost:.2f}", f"{percentage:.1f}%")
+                    
+                    console.print(env_table)
+                
+                if cost_analysis.forecast and include_forecasting:
+                    console.print(f"\n[bold]🔮 Cost Forecast:[/bold]")
+                    forecast = cost_analysis.forecast
+                    console.print(f"Next 30 days: [bold]${forecast.get('next_30_days', 0):.2f}[/bold]")
+                    console.print(f"Next 90 days: [bold]${forecast.get('next_90_days', 0):.2f}[/bold]")
+                    console.print(f"Monthly estimate: [bold]${forecast.get('monthly_estimate', 0):.2f}[/bold]")
+                    console.print(f"Daily growth rate: [bold]${forecast.get('daily_growth_rate', 0):.2f}[/bold]")
+                
+                if cost_analysis.recommendations and include_recommendations:
+                    console.print(f"\n[bold]💡 Optimization Recommendations:[/bold]")
+                    for i, rec in enumerate(cost_analysis.recommendations, 1):
+                        priority_color = "red" if rec.get("priority") == "high" else "yellow" if rec.get("priority") == "medium" else "green"
+                        console.print(f"{i}. [{priority_color}]{rec.get('title', 'Unknown')}[/{priority_color}]")
+                        console.print(f"   Priority: {rec.get('priority', 'unknown').upper()}")
+                        console.print(f"   Potential Savings: ${rec.get('potential_savings', 0):.2f}")
+                        console.print(f"   Action: {rec.get('action', 'No action specified')}")
+                        console.print()
+            
+        except Exception as e:
+            console.print(f"[red]❌ Error: {e}[/red]")
+            sys.exit(1)
+
+    asyncio.run(_cost_analysis())
+
+
+@cli.command()
+@click.option(
+    "--threshold", 
+    "-t", 
+    type=float, 
+    default=80.0, 
+    help="Budget threshold percentage for alerts (default: 80.0)"
+)
+@click.option(
+    "--format", 
+    "-f", 
+    type=click.Choice(["table", "json"]), 
+    default="table", 
+    help="Output format"
+)
+@click.pass_context
+def cost_alerts(ctx, threshold: float, format: str):
+    """Get cost alerts based on budget thresholds and spending patterns."""
+    async def _cost_alerts():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            
+            cost_manager = CostManager(config)
+            
+            console.print(f"[blue]🚨 Checking cost alerts (threshold: {threshold}%)...[/blue]")
+            
+            alerts = await cost_manager.get_cost_alerts(threshold)
+            
+            if format == "json":
+                import json
+                console.print(json.dumps(alerts, indent=2))
+            else:
+                if not alerts:
+                    console.print("[green]✅ No cost alerts found[/green]")
+                    return
+                
+                console.print(f"\n[bold red]🚨 Found {len(alerts)} Cost Alerts[/bold red]")
+                
+                for i, alert in enumerate(alerts, 1):
+                    severity_color = "red" if alert.get("severity") == "high" else "yellow" if alert.get("severity") == "medium" else "green"
+                    console.print(f"\n{i}. [{severity_color}]{alert.get('type', 'Unknown').replace('_', ' ').title()}[/{severity_color}]")
+                    console.print(f"   Severity: {alert.get('severity', 'unknown').upper()}")
+                    console.print(f"   Message: {alert.get('message', 'No message')}")
+                    
+                    if 'current_cost' in alert:
+                        console.print(f"   Current Cost: ${alert['current_cost']:.2f}")
+                    if 'budget' in alert:
+                        console.print(f"   Budget: ${alert['budget']:.2f}")
+                    if 'recommendation' in alert:
+                        console.print(f"   Recommendation: {alert['recommendation']}")
+            
+        except Exception as e:
+            console.print(f"[red]❌ Error: {e}[/red]")
+            sys.exit(1)
+
+    asyncio.run(_cost_alerts())
+
+
+@cli.command()
+@click.option(
+    "--format", 
+    "-f", 
+    type=click.Choice(["table", "json"]), 
+    default="table", 
+    help="Output format"
+)
+@click.pass_context
+def cost_optimization_score(ctx, format: str):
+    """Get cost optimization score for the infrastructure."""
+    async def _cost_optimization_score():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            
+            cost_manager = CostManager(config)
+            
+            console.print("[blue]📈 Calculating cost optimization score...[/blue]")
+            
+            score_data = await cost_manager.get_cost_optimization_score()
+            
+            if format == "json":
+                import json
+                console.print(json.dumps(score_data, indent=2))
+            else:
+                score = score_data.get("score", 0)
+                grade = score_data.get("grade", "F")
+                
+                grade_color = "green" if grade in ["A", "B"] else "yellow" if grade == "C" else "red"
+                
+                console.print(f"\n[bold {grade_color}]🎯 Cost Optimization Score: {grade} ({score:.1f}/100)[/bold {grade_color}]")
+                
+                status = "excellent" if score >= 90 else "good" if score >= 80 else "fair" if score >= 70 else "poor"
+                console.print(f"Status: {status.title()}")
+                
+                if "factors" in score_data:
+                    console.print(f"\n[bold]📊 Optimization Factors:[/bold]")
+                    factors_table = Table(show_header=True, header_style="bold magenta")
+                    factors_table.add_column("Factor", style="cyan")
+                    factors_table.add_column("Score", justify="right", style="green")
+                    factors_table.add_column("Status", justify="center")
+                    
+                    for factor, factor_score in score_data["factors"].items():
+                        factor_name = factor.replace("_", " ").title()
+                        factor_status = "✅" if factor_score >= 80 else "⚠️" if factor_score >= 60 else "❌"
+                        factors_table.add_row(factor_name, f"{factor_score:.1f}", factor_status)
+                    
+                    console.print(factors_table)
+                
+                if score < 80:
+                    console.print(f"\n[yellow]💡 Consider running 'cost-analysis --include-recommendations' for optimization suggestions[/yellow]")
+            
+        except Exception as e:
+            console.print(f"[red]❌ Error: {e}[/red]")
+            sys.exit(1)
+
+    asyncio.run(_cost_optimization_score())
+
+
+@cli.command()
+@click.option(
+    "--environment", 
+    "-e", 
+    help="Filter by environment"
+)
+@click.option(
+    "--format", 
+    "-f", 
+    type=click.Choice(["table", "json"]), 
+    default="table", 
+    help="Output format"
+)
+@click.option(
+    "--include-alerts/--no-alerts", 
+    default=True, 
+    help="Include cost alerts"
+)
+@click.option(
+    "--include-optimization/--no-optimization", 
+    default=True, 
+    help="Include optimization score"
+)
+@click.pass_context
+def cost_status(ctx, environment: Optional[str], format: str, include_alerts: bool, include_optimization: bool):
+    """Get comprehensive cost status including analysis, alerts, and optimization score."""
+    async def _cost_status():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            
+            cost_manager = CostManager(config)
+            
+            console.print(f"[blue]💰 Getting comprehensive cost status for {environment or 'all environments'}...[/blue]")
+            
+            # Get cost analysis
+            cost_analysis = await cost_manager.get_cost_analysis(
+                environment=environment,
+                period_days=30,
+                include_forecasting=True,
+                include_recommendations=True
+            )
+            
+            status_data = {
+                "cost_summary": {
+                    "total_cost": cost_analysis.total_cost,
+                    "currency": cost_analysis.currency,
+                    "period": cost_analysis.period,
+                    "environment_filter": environment,
+                    "last_updated": cost_analysis.last_updated.isoformat()
+                },
+                "service_breakdown": cost_analysis.breakdown_by_service,
+                "environment_breakdown": cost_analysis.breakdown_by_environment,
+                "trends": cost_analysis.trends[-7:] if cost_analysis.trends else [],
+                "forecast": cost_analysis.forecast,
+                "recommendations": cost_analysis.recommendations
+            }
+            
+            # Add alerts if requested
+            if include_alerts:
+                alerts = await cost_manager.get_cost_alerts()
+                status_data["alerts"] = {
+                    "total_count": len(alerts),
+                    "alerts": alerts,
+                    "has_critical_alerts": any(alert.get("severity") == "high" for alert in alerts)
+                }
+            
+            # Add optimization score if requested
+            if include_optimization:
+                optimization_score = await cost_manager.get_cost_optimization_score()
+                status_data["optimization"] = optimization_score
+            
+            # Determine overall status
+            overall_status = "healthy"
+            if include_alerts and status_data.get("alerts", {}).get("has_critical_alerts"):
+                overall_status = "critical"
+            elif include_optimization and optimization_score.get("score", 100) < 70:
+                overall_status = "needs_attention"
+            elif cost_analysis.total_cost == 0:
+                overall_status = "no_data"
+            
+            if format == "json":
+                import json
+                output = {
+                    "overall_status": overall_status,
+                    "cost_status": status_data
+                }
+                console.print(json.dumps(output, indent=2))
+            else:
+                # Determine status color
+                status_color = "green" if overall_status == "healthy" else "red" if overall_status == "critical" else "yellow"
+                
+                console.print(f"\n[bold {status_color}]💰 Overall Cost Status: {overall_status.replace('_', ' ').title()}[/bold {status_color}]")
+                console.print(f"Total Cost: [bold]${cost_analysis.total_cost:.2f} {cost_analysis.currency}[/bold]")
+                console.print(f"Period: {cost_analysis.period}")
+                
+                # Top services
+                if cost_analysis.breakdown_by_service:
+                    top_service = max(cost_analysis.breakdown_by_service.items(), key=lambda x: x[1])
+                    console.print(f"Top Service: {top_service[0]} (${top_service[1]:.2f})")
+                
+                # Alerts summary
+                if include_alerts and status_data.get("alerts"):
+                    alerts_info = status_data["alerts"]
+                    alert_color = "red" if alerts_info["has_critical_alerts"] else "yellow" if alerts_info["total_count"] > 0 else "green"
+                    console.print(f"Alerts: [{alert_color}]{alerts_info['total_count']} alerts[/{alert_color}]")
+                
+                # Optimization score
+                if include_optimization and "optimization" in status_data:
+                    opt_score = status_data["optimization"]
+                    grade_color = "green" if opt_score["grade"] in ["A", "B"] else "yellow" if opt_score["grade"] == "C" else "red"
+                    console.print(f"Optimization Score: [{grade_color}]{opt_score['grade']} ({opt_score['score']:.1f}/100)[/{grade_color}]")
+                
+                # Recommendations count
+                rec_count = len(cost_analysis.recommendations)
+                if rec_count > 0:
+                    console.print(f"Recommendations: [yellow]{rec_count} optimization opportunities[/yellow]")
+                else:
+                    console.print("Recommendations: [green]No immediate optimizations needed[/green]")
+                
+                # Quick actions
+                console.print(f"\n[bold]🔧 Quick Actions:[/bold]")
+                if rec_count > 0:
+                    console.print("• Run 'cost-analysis --include-recommendations' for detailed optimization suggestions")
+                if include_alerts and status_data.get("alerts", {}).get("total_count", 0) > 0:
+                    console.print("• Run 'cost-alerts' to see detailed alert information")
+                if include_optimization and optimization_score.get("score", 100) < 80:
+                    console.print("• Run 'cost-optimization-score' for detailed optimization factors")
+                
+                console.print(f"• Use '--environment <env>' to filter by specific environment")
+            
+        except Exception as e:
+            console.print(f"[red]❌ Error: {e}[/red]")
+            sys.exit(1)
+
+    asyncio.run(_cost_status())
 
 
 def main():
