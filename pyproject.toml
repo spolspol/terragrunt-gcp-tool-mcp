@@ -1,13 +1,13 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "terragrunt-gcp-mcp"
-version = "0.2.0"
-description = "MCP server tool for managing GCP infrastructure with Terragrunt (CLI Redesign Compatible)"
+version = "0.3.1"
+description = "MCP server for Terragrunt GCP infrastructure management with experimental features support"
 authors = [
-    {name = "Infrastructure Team", email = "infra@example.com"}
+    {name = "Your Name", email = "your.email@example.com"}
 ]
 readme = "README.md"
 license = {text = "GPL-3.0"}
@@ -15,7 +15,9 @@ requires-python = ">=3.8"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -23,49 +25,44 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: System :: Systems Administration",
+    "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
 ]
-keywords = ["mcp", "terragrunt", "terraform", "gcp", "infrastructure", "iac"]
+keywords = ["mcp", "terragrunt", "gcp", "infrastructure", "automation", "experimental", "stacks"]
 
 dependencies = [
-    "mcp>=0.4.0",
-    "fastmcp>=0.2.0",
-    "google-cloud-core>=2.4.1",
-    "google-cloud-storage>=2.10.0",
-    "google-cloud-compute>=1.15.0",
-    "google-cloud-resource-manager>=1.10.4",
-    "google-cloud-billing>=1.12.2",
-    "google-cloud-monitoring>=2.16.0",
-    "google-cloud-logging>=3.8.0",
-    "google-auth>=2.23.4",
-    "pyyaml>=6.0.1",
-    "requests>=2.31.0",
-    "click>=8.1.7",
-    "rich>=13.7.0",
-    "python-dateutil>=2.8.2",
-    "jinja2>=3.1.2",
-    "gitpython>=3.1.40",
-    "psutil>=5.9.6",
+    "fastmcp>=2.5.0",
     "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "PyYAML>=6.0",
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "httpx>=0.24.0",
+    "google-cloud-storage>=2.0.0",
+    "google-cloud-compute>=1.0.0",
+    "google-cloud-billing>=1.0.0",
+    "google-cloud-monitoring>=2.0.0",
+    "google-cloud-logging>=3.0.0",
+    "google-auth>=2.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.3",
-    "pytest-asyncio>=0.21.1",
-    "pytest-cov>=4.1.0",
-    "black>=23.11.0",
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
     "isort>=5.12.0",
-    "flake8>=6.1.0",
-    "mypy>=1.7.1",
-    "pre-commit>=3.5.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/organization/terragrunt-gcp-tool-mcp"
-Repository = "https://github.com/organization/terragrunt-gcp-tool-mcp"
-Documentation = "https://github.com/organization/terragrunt-gcp-tool-mcp/docs"
-"Bug Tracker" = "https://github.com/organization/terragrunt-gcp-tool-mcp/issues"
+Homepage = "https://github.com/yourusername/terragrunt-gcp-mcp"
+Repository = "https://github.com/yourusername/terragrunt-gcp-mcp"
+Documentation = "https://github.com/yourusername/terragrunt-gcp-mcp#readme"
+"Bug Tracker" = "https://github.com/yourusername/terragrunt-gcp-mcp/issues"
 
 [project.scripts]
 terragrunt-gcp-mcp = "terragrunt_gcp_mcp.cli:main"
@@ -74,20 +71,21 @@ terragrunt-gcp-mcp = "terragrunt_gcp_mcp.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-terragrunt_gcp_mcp = ["templates/**/*", "config/**/*"]
+terragrunt_gcp_mcp = ["py.typed"]
 
 [tool.black]
 line-length = 88
-target-version = ["py38", "py39", "py310", "py311", "py312"]
+target-version = ['py38']
 include = '\.pyi?$'
-exclude = '''
+extend-exclude = '''
 /(
-    \.git
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
   | \.mypy_cache
   | \.tox
   | \.venv
-  | _build
-  | buck-out
   | build
   | dist
 )/
@@ -114,19 +112,39 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 
+[[tool.mypy.overrides]]
+module = [
+    "yaml.*",
+    "google.*",
+    "fastmcp.*",
+]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
-minversion = "6.0"
-addopts = "-ra -q --cov=terragrunt_gcp_mcp --cov-report=term-missing"
 testpaths = ["tests"]
-python_files = ["test_*.py", "*_test.py"]
+python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+    "--cov=terragrunt_gcp_mcp",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "experimental: marks tests for experimental features",
+]
 
 [tool.coverage.run]
 source = ["src/terragrunt_gcp_mcp"]
 omit = [
     "*/tests/*",
-    "*/test_*",
+    "*/test_*.py",
     "*/__pycache__/*",
 ]
 

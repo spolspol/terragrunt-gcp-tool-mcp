@@ -1,4 +1,4 @@
-# Example configuration for Terragrunt GCP MCP Tool
+# Example configuration for Terragrunt GCP MCP Tool with Experimental Features
 # Copy this file to config.yaml and update with your settings
 
 # GCP Configuration
@@ -25,6 +25,25 @@ terragrunt:
   # Advanced settings
   max_retries: 3              # Maximum retries for failed operations
   retry_delay: 5              # Delay between retries in seconds
+  
+  # Experimental features configuration
+  experimental:
+    # Stacks feature (experimental)
+    stacks_enabled: true                    # Enable Terragrunt stacks experimental feature
+    enhanced_dependency_resolution: true    # Use enhanced dependency resolution
+    parallel_execution: true                # Enable parallel execution within stacks
+    stack_outputs: true                     # Enable stack-level outputs
+    recursive_stacks: false                 # Enable recursive stacks (not yet stable)
+    
+    # Stack execution settings
+    max_parallel_units: 10                  # Maximum number of units to execute in parallel
+    stack_timeout: 7200                     # Timeout for stack operations in seconds (2 hours)
+    continue_on_error: false                # Continue stack execution on unit errors
+    
+    # Advanced experimental features
+    auto_retry: true                        # Automatically retry failed units
+    max_retries: 3                          # Maximum number of retries for failed units
+    retry_delay: 30                         # Delay between retries in seconds
 
 # Slack Configuration (optional)
 slack:
@@ -42,6 +61,7 @@ monitoring:
     cost_increase_percent: 20.0
     deployment_duration_minutes: 30.0
     error_rate_percent: 5.0
+    stack_failure_rate_percent: 10.0  # New threshold for stack failures
 
 # Logging Configuration
 logging:

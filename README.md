@@ -1,8 +1,15 @@
 # Terragrunt GCP MCP Tool
 
-A Model Context Protocol (MCP) server tool for managing Google Cloud Platform infrastructure using Terragrunt. This tool provides intelligent automation and management capabilities for the terragrunt-gcp-org-automation codebase.
+A Model Context Protocol (MCP) server tool for managing Google Cloud Platform infrastructure using Terragrunt. This tool provides intelligent automation and management capabilities for the terragrunt-gcp-org-automation codebase with support for **Terragrunt Experimental Features**.
 
 ## Features
+
+### 🧪 Experimental Features Support
+- **Terragrunt Stacks**: Enhanced dependency management and parallel execution using the experimental stacks feature
+- **Enhanced Dependency Resolution**: Improved dependency analysis and execution ordering
+- **Stack-Level Operations**: Execute commands across multiple units with intelligent dependency handling
+- **Parallel Execution**: Run multiple units in parallel within stacks for faster deployments
+- **Stack Outputs**: Aggregate and manage outputs at the stack level
 
 ### Resource Management
 - **Add New Resources**: Create new infrastructure resources with templates
@@ -69,6 +76,20 @@ terragrunt:
   root_path: "/path/to/terragrunt-gcp-org-automation"
   binary_path: "terragrunt"
   terraform_binary: "tofu"
+  
+  # Experimental features configuration
+  experimental:
+    # Stacks feature (experimental)
+    stacks_enabled: true                    # Enable Terragrunt stacks experimental feature
+    enhanced_dependency_resolution: true    # Use enhanced dependency resolution
+    parallel_execution: true                # Enable parallel execution within stacks
+    stack_outputs: true                     # Enable stack-level outputs
+    recursive_stacks: false                 # Enable recursive stacks (not yet stable)
+    
+    # Stack execution settings
+    max_parallel_units: 10                  # Maximum number of units to execute in parallel
+    stack_timeout: 7200                     # Timeout for stack operations in seconds (2 hours)
+    continue_on_error: false                # Continue stack execution on unit errors
 
 # Slack Configuration (optional)
 slack:
@@ -140,6 +161,13 @@ Add to your Claude Desktop MCP configuration:
 
 The MCP server provides these tools:
 
+#### 🧪 Experimental Stacks Tools
+- `list_stacks` - List all Terragrunt stacks using experimental features
+- `get_stack_details` - Get detailed information about a specific stack including units and execution order
+- `execute_stack_command` - Execute commands on stacks with parallel execution and dependency management
+- `get_stack_outputs` - Get aggregated outputs from stack-level operations
+- `get_enhanced_infrastructure_status` - Get comprehensive status including both traditional resources and stacks
+
 #### Resource Management
 - `list_resources` - List all resources in the infrastructure
 - `get_resource` - Get detailed information about a specific resource (deprecated, use get_resource_details)
@@ -148,6 +176,11 @@ The MCP server provides these tools:
 - `create_resource` - Create a new infrastructure resource
 - `update_resource` - Update an existing resource configuration
 - `delete_resource` - Delete a resource (with dependency checking)
+
+#### Visualization & Tree Drawing (New!)
+- `draw_resource_tree` - Draw a visual resource tree using Terragrunt CLI redesign commands
+- `get_dependency_graph` - Generate dependency graphs in DOT, Mermaid, or JSON format
+- `visualize_infrastructure` - Comprehensive infrastructure visualization with multiple formats
 
 #### Deployment Operations
 - `plan_deployment` - Generate deployment plan for changes (deprecated, use plan_resource_deployment)
@@ -169,6 +202,125 @@ The MCP server provides these tools:
 - `get_audit_log` - Retrieve audit logs
 
 ## Examples
+
+### 🧪 Using Experimental Stacks Features
+
+#### CLI Usage
+```bash
+# List all stacks
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml list-stacks
+
+# Get detailed information about a specific stack
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml get-stack-details "live/dev-account/test-dev/dev-99"
+
+# Execute a command on a stack (with parallel execution)
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml execute-stack-command "live/dev-account/test-dev/dev-99" plan --dry-run
+
+# Get stack outputs
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml get-stack-outputs "live/dev-account/test-dev/dev-99"
+
+# Get enhanced infrastructure status including stacks
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml status --include-stacks
+```
+
+### 🌳 Resource Tree Visualization (New!)
+
+#### CLI Usage
+```bash
+# Draw a basic resource tree
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml draw-tree
+
+# Draw tree for specific environment
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml draw-tree --environment dev-99
+
+# Draw tree with limited depth
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml draw-tree --max-depth 3
+
+# Generate dependency graph in DOT format (for Graphviz)
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml dependency-graph --format dot
+
+# Generate dependency graph in Mermaid format
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml dependency-graph --format mermaid
+
+# Comprehensive visualization
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml visualize --type tree --format ascii
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml visualize --type dag --format mermaid
+
+# Get tree data in JSON format
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml draw-tree --format json
+```
+
+#### MCP Usage
+```python
+# Example: Draw a resource tree
+result = draw_resource_tree(
+    environment="dev-99",
+    format="tree",
+    include_dependencies=True,
+    max_depth=4
+)
+
+# Example: Generate dependency graph
+result = get_dependency_graph(
+    environment="dev-99",
+    output_format="mermaid"
+)
+
+# Example: Comprehensive visualization
+result = visualize_infrastructure(
+    environment="dev-99",
+    visualization_type="tree",
+    include_dependencies=True,
+    output_format="ascii"
+)
+
+# Example: List all stacks (experimental)
+result = list_stacks(environment="dev-99")
+
+# Example: Get stack details with units and execution order (experimental)
+result = get_stack_details(stack_path="live/dev-account/test-dev/dev-99")
+
+# Example: Execute a plan command on a stack (experimental)
+result = execute_stack_command(
+    stack_path="live/dev-account/test-dev/dev-99",
+    command="plan",
+    dry_run=True
+)
+
+# Example: Get enhanced status including stacks (experimental)
+result = get_enhanced_infrastructure_status(
+    environment="dev-99",
+    include_stacks=True,
+    include_costs=False
+)
+```
+
+#### Example Tree Output
+```
+Infrastructure
+├── dev-account
+│   └── test-dev
+│       └── dev-99 (folder)
+│           ├── project (project)
+│           ├── europe-west2 (folder)
+│           │   ├── vpc (vpc-network) [deps: 1]
+│           │   ├── compute (folder)
+│           │   │   ├── web-server-01 (compute) [deps: 2]
+│           │   │   └── sftp-worker-01 (compute) [deps: 2]
+│           │   └── secrets (folder)
+│           │       └── sftp-sshfs-host (secrets) [deps: 1]
+│           └── bigquery (folder)
+│               └── dataset-01 (bigquery) [deps: 1]
+```
+
+#### Example Dependency Graph (Mermaid)
+```mermaid
+graph TD
+  project[project] --> vpc[vpc]
+  vpc[vpc] --> web_server_01[web-server-01]
+  vpc[vpc] --> sftp_worker_01[sftp-worker-01]
+  project[project] --> secrets[secrets]
+```
 
 ### Validating Resources
 
@@ -273,6 +425,21 @@ python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml plan-deployment "w
 python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml apply-deployment "web-server-01"
 ```
 
+#### 🧪 Experimental Stacks Workflow
+```bash
+# 1. List available stacks
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml list-stacks
+
+# 2. Get stack details and execution order
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml get-stack-details "dev-99"
+
+# 3. Plan the entire stack
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml execute-stack-command "dev-99" plan --dry-run
+
+# 4. Apply the stack with parallel execution
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml execute-stack-command "dev-99" apply
+```
+
 #### MCP Workflow
 ```python
 # Complete deployment workflow via MCP
@@ -354,6 +521,61 @@ status = get_infrastructure_status(
 )
 ```
 
+## 🧪 Experimental Features
+
+This tool supports Terragrunt's experimental features as documented in the [Terragrunt Experiments documentation](https://terragrunt.gruntwork.io/docs/reference/experiments/).
+
+### Stacks Feature
+
+The **Stacks** experimental feature provides:
+
+- **Enhanced Dependency Management**: Automatic dependency resolution and execution ordering
+- **Parallel Execution**: Run multiple units in parallel within stacks
+- **Stack-Level Operations**: Execute commands across entire stacks
+- **Improved Error Handling**: Better error reporting and recovery
+- **Stack Outputs**: Aggregate outputs at the stack level
+
+#### Configuration
+
+Enable experimental features in your `config.yaml`:
+
+```yaml
+terragrunt:
+  experimental:
+    stacks_enabled: true                    # Enable stacks feature
+    enhanced_dependency_resolution: true    # Enhanced dependency analysis
+    parallel_execution: true                # Parallel unit execution
+    stack_outputs: true                     # Stack-level outputs
+    max_parallel_units: 10                  # Max parallel units
+    stack_timeout: 7200                     # Stack operation timeout
+```
+
+#### Stack Structure
+
+Stacks are defined using `stack.hcl` files in your Terragrunt structure:
+
+```
+live/
+├── dev-account/
+│   └── test-dev/
+│       └── dev-99/
+│           ├── stack.hcl              # Stack definition
+│           ├── project/
+│           │   └── terragrunt.hcl     # Unit 1
+│           ├── compute/
+│           │   └── terragrunt.hcl     # Unit 2
+│           └── secrets/
+│               └── terragrunt.hcl     # Unit 3
+```
+
+#### Benefits
+
+1. **Faster Deployments**: Parallel execution of independent units
+2. **Better Dependency Management**: Automatic dependency resolution
+3. **Improved Reliability**: Enhanced error handling and retry mechanisms
+4. **Stack-Level Visibility**: Aggregate status and outputs
+5. **Simplified Operations**: Single commands for complex deployments
+
 ## Architecture
 
 ```
@@ -361,14 +583,16 @@ status = get_infrastructure_status(
 │   MCP Client    │    │   MCP Server     │    │   Terragrunt    │
 │   (Claude)      │◄──►│   (This Tool)    │◄──►│   Infrastructure│
 └─────────────────┘    └──────────────────┘    └─────────────────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │   External APIs  │
-                       │   • GCP APIs     │
-                       │   • Slack API    │
-                       │   • GitHub API   │
-                       └──────────────────┘
+                                │                        │
+                                ▼                        ▼
+                       ┌──────────────────┐    ┌─────────────────┐
+                       │   External APIs  │    │ 🧪 Experimental │
+                       │   • GCP APIs     │    │   Stacks        │
+                       │   • Slack API    │    │   • Enhanced    │
+                       │   • GitHub API   │    │     Dependencies│
+                       └──────────────────┘    │   • Parallel    │
+                                              │     Execution   │
+                                              └─────────────────┘
 ```
 
 ## Security

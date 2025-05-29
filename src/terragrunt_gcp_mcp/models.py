@@ -51,6 +51,26 @@ class ResourceStatus(str, Enum):
     DRIFT_DETECTED = "drift_detected"
 
 
+class StackStatus(str, Enum):
+    """Stack status values for experimental stacks feature."""
+    
+    UNKNOWN = "unknown"
+    READY = "ready"
+    PLANNING = "planning"
+    APPLYING = "applying"
+    DEPLOYED = "deployed"
+    FAILED = "failed"
+    DESTROYING = "destroying"
+
+
+class UnitType(str, Enum):
+    """Unit types for Terragrunt experimental features."""
+    
+    TERRAGRUNT = "terragrunt"
+    TERRAFORM = "terraform"
+    STACK = "stack"
+
+
 class Resource(BaseModel):
     """Represents a Terragrunt resource."""
     
@@ -66,6 +86,55 @@ class Resource(BaseModel):
     last_modified: Optional[datetime] = None
     last_deployed: Optional[datetime] = None
     terraform_state: Optional[Dict[str, Any]] = None
+    
+    # New fields for experimental features
+    unit_type: UnitType = UnitType.TERRAGRUNT
+    stack_path: Optional[str] = None
+    parent_stack: Optional[str] = None
+
+
+class TerragruntUnit(BaseModel):
+    """Represents a Terragrunt unit (experimental feature)."""
+    
+    name: str
+    path: str
+    type: UnitType
+    dependencies: List[str] = Field(default_factory=list)
+    dependents: List[str] = Field(default_factory=list)
+    stack_path: Optional[str] = None
+    configuration: Dict[str, Any] = Field(default_factory=dict)
+    status: ResourceStatus = ResourceStatus.UNKNOWN
+    last_modified: Optional[datetime] = None
+
+
+class TerragruntStack(BaseModel):
+    """Represents a Terragrunt stack (experimental feature)."""
+    
+    name: str
+    path: str
+    units: List[TerragruntUnit] = Field(default_factory=list)
+    dependencies: List[str] = Field(default_factory=list)
+    status: StackStatus = StackStatus.UNKNOWN
+    configuration: Dict[str, Any] = Field(default_factory=dict)
+    execution_order: List[List[str]] = Field(default_factory=list)  # Parallel execution groups
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[datetime] = None
+    last_executed: Optional[datetime] = None
+
+
+class StackExecution(BaseModel):
+    """Represents a stack execution (experimental feature)."""
+    
+    id: str
+    stack_path: str
+    command: str
+    status: StackStatus
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    execution_plan: List[List[str]] = Field(default_factory=list)
+    unit_results: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    error_message: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class DeploymentPlan(BaseModel):
@@ -78,6 +147,10 @@ class DeploymentPlan(BaseModel):
     status: DeploymentStatus = DeploymentStatus.NOT_STARTED
     dry_run: bool = False
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    
+    # New fields for experimental features
+    stack_plan: Optional[Dict[str, Any]] = None
+    execution_order: List[List[str]] = Field(default_factory=list)
 
 
 class Deployment(BaseModel):
@@ -106,14 +179,25 @@ class InfrastructureStatus(BaseModel):
     last_check: datetime
     health_score: float = Field(ge=0.0, le=100.0)
     cost_info: Optional[Dict[str, Any]] = None
+    
+    # New fields for experimental features
+    total_stacks: int = 0
+    deployed_stacks: int = 0
+    failed_stacks: int = 0
+    stack_health_score: float = Field(default=100.0, ge=0.0, le=100.0)
 
 
 class DependencyGraph(BaseModel):
-    """Resource dependency graph."""
+    """Resource dependency graph with experimental features support."""
     
     nodes: List[Dict[str, Any]] = Field(default_factory=list)
     edges: List[Dict[str, str]] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    
+    # New fields for experimental features
+    stacks: List[Dict[str, Any]] = Field(default_factory=list)
+    execution_order: List[List[str]] = Field(default_factory=list)
+    parallel_groups: List[List[str]] = Field(default_factory=list)
 
 
 class CostAnalysis(BaseModel):
@@ -159,6 +243,11 @@ class TerragruntCommand:
     timeout: int = 3600
     env_vars: Optional[Dict[str, str]] = None
     capture_output: bool = True
+    
+    # New fields for experimental features
+    use_experimental: bool = True
+    stack_mode: bool = False
+    parallel_execution: bool = True
 
 
 @dataclass
@@ -203,4 +292,15 @@ class ValidationResult(BaseModel):
     errors: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
     resource_path: str
-    validated_at: datetime 
+    validated_at: datetime
+
+
+class ExperimentalFeatures(BaseModel):
+    """Configuration for experimental features."""
+    
+    stacks_enabled: bool = True
+    enhanced_dependency_resolution: bool = True
+    parallel_execution: bool = True
+    stack_outputs: bool = True
+    recursive_stacks: bool = False  # Not yet stable
+    stack_run_commands: bool = True 

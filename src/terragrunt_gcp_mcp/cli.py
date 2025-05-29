@@ -1095,6 +1095,584 @@ def run_all(ctx, terragrunt_command: str, environment: Optional[str], dry_run: b
     asyncio.run(_run_all())
 
 
+@cli.command()
+@click.option(
+    "--environment", 
+    "-e", 
+    help="Filter by environment"
+)
+@click.option(
+    "--format", 
+    "-f", 
+    type=click.Choice(["table", "json"]), 
+    default="table", 
+    help="Output format"
+)
+@click.pass_context
+def list_stacks(ctx, environment: Optional[str], format: str):
+    """List all Terragrunt stacks using experimental features."""
+    async def _list_stacks():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            
+            if not config.is_experimental_enabled("stacks_enabled"):
+                console.print("[red]❌ Stacks experimental feature is disabled[/red]")
+                console.print("[yellow]Enable stacks in configuration to use this feature[/yellow]")
+                sys.exit(1)
+            
+            from .stack_manager import StackManager
+            manager = StackManager(config)
+            
+            console.print("[blue]Discovering stacks...[/blue]")
+            stacks = await manager.discover_stacks(environment)
+            
+            if format == "json":
+                import json
+                stack_data = []
+                for stack in stacks:
+                    stack_data.append({
+                        "name": stack.name,
+                        "path": stack.path,
+                        "status": stack.status.value,
+                        "unit_count": len(stack.units),
+                        "parallel_groups": len(stack.execution_order),
+                        "dependencies": stack.dependencies,
+                        "created_at": stack.created_at.isoformat() if stack.created_at else None,
+                    })
+                console.print(json.dumps(stack_data, indent=2))
+            else:
+                # Table format
+                table = Table(title=f"Terragrunt Stacks {f'({environment})' if environment else ''}")
+                table.add_column("Name", style="cyan")
+                table.add_column("Status", style="magenta")
+                table.add_column("Units", style="green")
+                table.add_column("Parallel Groups", style="yellow")
+                table.add_column("Dependencies", style="blue")
+                
+                for stack in stacks:
+                    table.add_row(
+                        stack.name,
+                        stack.status.value,
+                        str(len(stack.units)),
+                        str(len(stack.execution_order)),
+                        str(len(stack.dependencies))
+                    )
+                
+                console.print(table)
+                console.print(f"\n[green]Found {len(stacks)} stacks[/green]")
+                
+        except Exception as e:
+            console.print(f"[red]Error listing stacks: {e}[/red]")
+            sys.exit(1)
+    
+    asyncio.run(_list_stacks())
+
+
+@cli.command()
+@click.argument("stack_path")
+@click.option(
+    "--format", 
+    "-f", 
+    type=click.Choice(["table", "json"]), 
+    default="table", 
+    help="Output format"
+)
+@click.pass_context
+def get_stack_details(ctx, stack_path: str, format: str):
+    """Get detailed information about a specific stack."""
+    async def _get_stack_details():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            
+            if not config.is_experimental_enabled("stacks_enabled"):
+                console.print("[red]❌ Stacks experimental feature is disabled[/red]")
+                sys.exit(1)
+            
+            from .stack_manager import StackManager
+            manager = StackManager(config)
+            
+            console.print(f"[blue]Getting stack details for: {stack_path}[/blue]")
+            
+            # Find the stack
+            stacks = await manager.discover_stacks()
+            matching_stack = None
+            
+            for stack in stacks:
+                if stack.path == stack_path or stack.name == stack_path:
+                    matching_stack = stack
+                    break
+            
+            if not matching_stack:
+                console.print(f"[red]Stack not found: {stack_path}[/red]")
+                console.print("[yellow]Available stacks:[/yellow]")
+                for stack in stacks[:10]:
+                    console.print(f"  - {stack.path} ({stack.name})")
+                if len(stacks) > 10:
+                    console.print(f"  ... and {len(stacks) - 10} more")
+                sys.exit(1)
+            
+            if format == "json":
+                import json
+                stack_data = {
+                    "name": matching_stack.name,
+                    "path": matching_stack.path,
+                    "status": matching_stack.status.value,
+                    "unit_count": len(matching_stack.units),
+                    "parallel_groups": len(matching_stack.execution_order),
+                    "units": [
+                        {
+                            "name": unit.name,
+                            "path": unit.path,
+                            "type": unit.type.value,
+                            "status": unit.status.value,
+                            "dependencies": unit.dependencies,
+                        }
+                        for unit in matching_stack.units
+                    ],
+                    "execution_order": matching_stack.execution_order,
+                    "dependencies": matching_stack.dependencies,
+                    "metadata": matching_stack.metadata,
+                }
+                console.print(json.dumps(stack_data, indent=2))
+            else:
+                # Table format
+                table = Table(title=f"Stack Details: {matching_stack.name}")
+                table.add_column("Attribute", style="cyan", width=20)
+                table.add_column("Value", style="white", width=60)
+                
+                table.add_row("Name", matching_stack.name)
+                table.add_row("Path", matching_stack.path)
+                table.add_row("Status", matching_stack.status.value)
+                table.add_row("Unit Count", str(len(matching_stack.units)))
+                table.add_row("Parallel Groups", str(len(matching_stack.execution_order)))
+                table.add_row("Dependencies", str(len(matching_stack.dependencies)))
+                
+                if matching_stack.created_at:
+                    table.add_row("Created", matching_stack.created_at.strftime("%Y-%m-%d %H:%M:%S"))
+                
+                console.print(table)
+                
+                # Show units
+                if matching_stack.units:
+                    console.print(f"\n[yellow]Units ({len(matching_stack.units)}):[/yellow]")
+                    units_table = Table()
+                    units_table.add_column("Name", style="cyan")
+                    units_table.add_column("Type", style="magenta")
+                    units_table.add_column("Status", style="green")
+                    units_table.add_column("Dependencies", style="yellow")
+                    
+                    for unit in matching_stack.units:
+                        units_table.add_row(
+                            unit.name,
+                            unit.type.value,
+                            unit.status.value,
+                            str(len(unit.dependencies))
+                        )
+                    
+                    console.print(units_table)
+                
+                # Show execution order
+                if matching_stack.execution_order:
+                    console.print(f"\n[yellow]Execution Order ({len(matching_stack.execution_order)} groups):[/yellow]")
+                    for i, group in enumerate(matching_stack.execution_order, 1):
+                        console.print(f"  Group {i}: {', '.join(group)}")
+                
+        except Exception as e:
+            console.print(f"[red]Error getting stack details: {e}[/red]")
+            sys.exit(1)
+    
+    asyncio.run(_get_stack_details())
+
+
+@cli.command()
+@click.argument("stack_path")
+@click.argument("command")
+@click.option(
+    "--dry-run", 
+    is_flag=True, 
+    help="Run in dry-run mode"
+)
+@click.pass_context
+def execute_stack_command(ctx, stack_path: str, command: str, dry_run: bool):
+    """Execute a command on a stack using experimental features."""
+    async def _execute_stack_command():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            
+            if not config.is_experimental_enabled("stacks_enabled"):
+                console.print("[red]❌ Stacks experimental feature is disabled[/red]")
+                sys.exit(1)
+            
+            from .stack_manager import StackManager
+            manager = StackManager(config)
+            
+            console.print(f"[blue]Executing '{command}' on stack: {stack_path}[/blue]")
+            if dry_run:
+                console.print("[yellow]Running in dry-run mode[/yellow]")
+            
+            # Execute the command
+            execution = await manager.execute_stack_command(stack_path, command, dry_run)
+            
+            # Display results
+            console.print(f"\n[cyan]Execution ID:[/cyan] {execution.id}")
+            console.print(f"[cyan]Status:[/cyan] {execution.status.value}")
+            console.print(f"[cyan]Started:[/cyan] {execution.started_at}")
+            console.print(f"[cyan]Completed:[/cyan] {execution.completed_at}")
+            
+            if execution.unit_results:
+                console.print(f"\n[yellow]Unit Results ({len(execution.unit_results)}):[/yellow]")
+                for unit_path, result in execution.unit_results.items():
+                    status_color = "green" if result["status"] == "completed" else "red"
+                    console.print(f"  [{status_color}]{unit_path}[/{status_color}]: {result['status']}")
+                    
+                    if result.get("errors"):
+                        for error in result["errors"]:
+                            console.print(f"    [red]Error: {error}[/red]")
+            
+            if execution.status.value == "failed":
+                console.print(f"\n[red]❌ Execution failed[/red]")
+                if execution.error_message:
+                    console.print(f"[red]Error: {execution.error_message}[/red]")
+                sys.exit(1)
+            else:
+                console.print(f"\n[green]✅ Execution completed successfully[/green]")
+                
+        except Exception as e:
+            console.print(f"[red]Error executing stack command: {e}[/red]")
+            sys.exit(1)
+    
+    asyncio.run(_execute_stack_command())
+
+
+@cli.command()
+@click.argument("stack_path")
+@click.option(
+    "--format", 
+    "-f", 
+    type=click.Choice(["table", "json"]), 
+    default="table", 
+    help="Output format"
+)
+@click.pass_context
+def get_stack_outputs(ctx, stack_path: str, format: str):
+    """Get outputs from a stack using experimental features."""
+    async def _get_stack_outputs():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            
+            if not config.is_experimental_enabled("stack_outputs"):
+                console.print("[red]❌ Stack outputs experimental feature is disabled[/red]")
+                sys.exit(1)
+            
+            from .stack_manager import StackManager
+            manager = StackManager(config)
+            
+            console.print(f"[blue]Getting outputs for stack: {stack_path}[/blue]")
+            
+            outputs = await manager.get_stack_outputs(stack_path)
+            
+            if format == "json":
+                import json
+                console.print(json.dumps(outputs, indent=2))
+            else:
+                # Table format
+                table = Table(title=f"Stack Outputs: {stack_path}")
+                table.add_column("Output Name", style="cyan")
+                table.add_column("Value", style="white")
+                
+                for key, value in outputs.items():
+                    # Truncate long values
+                    value_str = str(value)
+                    if len(value_str) > 100:
+                        value_str = value_str[:97] + "..."
+                    table.add_row(key, value_str)
+                
+                console.print(table)
+                console.print(f"\n[green]Found {len(outputs)} outputs[/green]")
+                
+        except Exception as e:
+            console.print(f"[red]Error getting stack outputs: {e}[/red]")
+            sys.exit(1)
+    
+    asyncio.run(_get_stack_outputs())
+
+
+@cli.command()
+@click.option(
+    "--environment", 
+    "-e", 
+    help="Filter by environment"
+)
+@click.option(
+    "--format", 
+    "-f", 
+    type=click.Choice(["tree", "dag", "json"]), 
+    default="tree", 
+    help="Output format"
+)
+@click.option(
+    "--include-dependencies", 
+    is_flag=True, 
+    default=True,
+    help="Include dependency information"
+)
+@click.option(
+    "--max-depth", 
+    type=int, 
+    help="Maximum depth to display"
+)
+@click.pass_context
+def draw_tree(ctx, environment: Optional[str], format: str, include_dependencies: bool, max_depth: Optional[int]):
+    """Draw a visual resource tree using Terragrunt CLI redesign commands."""
+    async def _draw_tree():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            manager = TerragruntManager(config)
+            
+            console.print(f"[blue]Drawing resource tree{f' for {environment}' if environment else ''}...[/blue]")
+            
+            # Generate the resource tree
+            tree_result = await manager.draw_resource_tree(
+                environment=environment,
+                format=format,
+                include_dependencies=include_dependencies,
+                max_depth=max_depth
+            )
+            
+            if format == "json":
+                import json
+                console.print(json.dumps(tree_result, indent=2))
+            else:
+                # Display the visual tree
+                console.print(f"\n[yellow]Resource Tree ({tree_result['format']} format):[/yellow]")
+                if tree_result["environment_filter"]:
+                    console.print(f"[cyan]Environment: {tree_result['environment_filter']}[/cyan]")
+                console.print(f"[cyan]Total Resources: {tree_result['total_resources']}[/cyan]")
+                if include_dependencies:
+                    console.print("[cyan]Dependencies: Included[/cyan]")
+                if max_depth:
+                    console.print(f"[cyan]Max Depth: {max_depth}[/cyan]")
+                
+                console.print()
+                
+                # Print the visual representation
+                visual_lines = tree_result["visual_representation"]
+                for line in visual_lines:
+                    console.print(line)
+                
+                console.print(f"\n[green]✅ Tree generated successfully[/green]")
+                
+        except Exception as e:
+            console.print(f"[red]Error drawing resource tree: {e}[/red]")
+            sys.exit(1)
+    
+    asyncio.run(_draw_tree())
+
+
+@cli.command()
+@click.option(
+    "--environment", 
+    "-e", 
+    help="Filter by environment"
+)
+@click.option(
+    "--format", 
+    "-f", 
+    type=click.Choice(["dot", "json", "mermaid"]), 
+    default="dot", 
+    help="Output format"
+)
+@click.pass_context
+def dependency_graph(ctx, environment: Optional[str], format: str):
+    """Generate dependency graph using Terragrunt CLI redesign commands."""
+    async def _dependency_graph():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            manager = TerragruntManager(config)
+            
+            console.print(f"[blue]Generating dependency graph{f' for {environment}' if environment else ''}...[/blue]")
+            
+            # Generate the dependency graph
+            graph_result = await manager.get_dependency_graph(
+                environment=environment,
+                output_format=format
+            )
+            
+            if format == "json":
+                import json
+                console.print(json.dumps(graph_result, indent=2))
+            elif format == "dot":
+                console.print(f"\n[yellow]Dependency Graph (DOT format):[/yellow]")
+                if graph_result["environment_filter"]:
+                    console.print(f"[cyan]Environment: {graph_result['environment_filter']}[/cyan]")
+                console.print()
+                
+                dot_content = graph_result["graph_data"]["dot_content"]
+                console.print(dot_content)
+                
+                console.print(f"\n[green]✅ DOT graph generated successfully[/green]")
+                console.print("[blue]You can visualize this with Graphviz:[/blue]")
+                console.print("  echo '<dot_content>' | dot -Tpng -o graph.png")
+                
+            elif format == "mermaid":
+                console.print(f"\n[yellow]Dependency Graph (Mermaid format):[/yellow]")
+                if graph_result["environment_filter"]:
+                    console.print(f"[cyan]Environment: {graph_result['environment_filter']}[/cyan]")
+                console.print()
+                
+                mermaid_content = graph_result["graph_data"]["mermaid_content"]
+                console.print(mermaid_content)
+                
+                console.print(f"\n[green]✅ Mermaid graph generated successfully[/green]")
+                console.print("[blue]You can visualize this at: https://mermaid.live[/blue]")
+            
+            # Show summary
+            graph_data = graph_result["graph_data"]
+            if "nodes" in graph_data and "edges" in graph_data:
+                console.print(f"\n[cyan]Graph Summary:[/cyan]")
+                console.print(f"  Nodes: {len(graph_data['nodes'])}")
+                console.print(f"  Edges: {len(graph_data['edges'])}")
+            
+            console.print(f"[blue]Command used: {graph_result['command_used']}[/blue]")
+                
+        except Exception as e:
+            console.print(f"[red]Error generating dependency graph: {e}[/red]")
+            sys.exit(1)
+    
+    asyncio.run(_dependency_graph())
+
+
+@cli.command()
+@click.option(
+    "--environment", 
+    "-e", 
+    help="Filter by environment"
+)
+@click.option(
+    "--type", 
+    "-t",
+    "visualization_type",
+    type=click.Choice(["tree", "dag", "hierarchy"]), 
+    default="tree", 
+    help="Type of visualization"
+)
+@click.option(
+    "--format", 
+    "-f", 
+    type=click.Choice(["ascii", "dot", "mermaid", "json"]), 
+    default="ascii", 
+    help="Output format"
+)
+@click.option(
+    "--include-dependencies", 
+    is_flag=True, 
+    default=True,
+    help="Include dependency information"
+)
+@click.pass_context
+def visualize(ctx, environment: Optional[str], visualization_type: str, format: str, include_dependencies: bool):
+    """Comprehensive infrastructure visualization using Terragrunt CLI redesign."""
+    async def _visualize():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            manager = TerragruntManager(config)
+            
+            console.print(f"[blue]Generating {visualization_type} visualization{f' for {environment}' if environment else ''}...[/blue]")
+            
+            results = {}
+            
+            if visualization_type in ["tree", "hierarchy"]:
+                # Generate tree visualization
+                tree_format = "tree" if format == "ascii" else format
+                tree_result = await manager.draw_resource_tree(
+                    environment=environment,
+                    format=tree_format,
+                    include_dependencies=include_dependencies,
+                    max_depth=None
+                )
+                results["tree"] = tree_result
+            
+            if visualization_type in ["dag", "dependencies"] or include_dependencies:
+                # Generate dependency graph
+                graph_format = "dot" if format == "ascii" else format
+                graph_result = await manager.get_dependency_graph(
+                    environment=environment,
+                    output_format=graph_format
+                )
+                results["dependency_graph"] = graph_result
+            
+            if format == "json":
+                import json
+                console.print(json.dumps(results, indent=2))
+            else:
+                # Display results
+                console.print(f"\n[yellow]Infrastructure Visualization ({visualization_type}):[/yellow]")
+                if environment:
+                    console.print(f"[cyan]Environment: {environment}[/cyan]")
+                console.print(f"[cyan]Format: {format}[/cyan]")
+                console.print(f"[cyan]Include Dependencies: {include_dependencies}[/cyan]")
+                console.print()
+                
+                # Show tree if available
+                if "tree" in results:
+                    console.print("[yellow]📊 Resource Tree:[/yellow]")
+                    tree_lines = results["tree"]["visual_representation"]
+                    for line in tree_lines:
+                        console.print(line)
+                    console.print()
+                
+                # Show dependency graph if available
+                if "dependency_graph" in results:
+                    console.print("[yellow]🔗 Dependency Graph:[/yellow]")
+                    graph_data = results["dependency_graph"]["graph_data"]
+                    
+                    if format == "ascii" and "dot_content" in graph_data:
+                        # Show simplified dependency list for ASCII
+                        if "edges" in graph_data:
+                            for source, target in graph_data["edges"]:
+                                console.print(f"  {source} → {target}")
+                    elif "dot_content" in graph_data:
+                        console.print(graph_data["dot_content"])
+                    elif "mermaid_content" in graph_data:
+                        console.print(graph_data["mermaid_content"])
+                
+                console.print(f"\n[green]✅ Visualization generated successfully[/green]")
+                
+        except Exception as e:
+            console.print(f"[red]Error generating visualization: {e}[/red]")
+            sys.exit(1)
+    
+    asyncio.run(_visualize())
+
+
 def main():
     """Main entry point."""
     cli()

@@ -582,4 +582,375 @@ class TerragruntManager:
             
         except Exception as e:
             logger.error(f"Failed to run custom command {command}: {e}")
-            raise 
+            raise
+
+    async def draw_resource_tree(
+        self, 
+        environment: Optional[str] = None,
+        format: str = "tree",
+        include_dependencies: bool = True,
+        max_depth: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Draw a resource tree using Terragrunt CLI redesign commands.
+        
+        Args:
+            environment: Filter by environment (optional)
+            format: Output format ("tree", "dag", "json")
+            include_dependencies: Whether to include dependency information
+            max_depth: Maximum depth to display (optional)
+        
+        Returns:
+            Dict containing tree structure and metadata
+        """
+        try:
+            # Use the new 'find' command to discover resources
+            env_vars = self._prepare_environment()
+            
+            # Build find command with new CLI redesign structure
+            find_command = [self.binary_path, "find"]
+            if include_dependencies:
+                find_command.append("--dependencies")
+            if format == "json":
+                find_command.append("--json")
+            
+            # Execute find command from root directory
+            exit_code, stdout, stderr, _ = await run_command(
+                find_command,
+                working_dir=self.root_path,
+                timeout=300,
+                env_vars=env_vars,
+            )
+            
+            if exit_code != 0:
+                raise Exception(f"Find command failed: {stderr}")
+            
+            # Parse the output
+            if format == "json":
+                import json
+                try:
+                    resources_data = json.loads(stdout)
+                except json.JSONDecodeError:
+                    # Fallback to manual parsing
+                    resources_data = self._parse_find_output(stdout)
+            else:
+                resources_data = self._parse_find_output(stdout)
+            
+            # Filter by environment if specified
+            if environment:
+                resources_data = [
+                    r for r in resources_data 
+                    if environment in r.get("path", "") or environment in r.get("name", "")
+                ]
+            
+            # Build tree structure
+            tree_structure = self._build_tree_structure(
+                resources_data, 
+                include_dependencies, 
+                max_depth
+            )
+            
+            # Generate visual representation
+            if format == "tree":
+                tree_visual = self._generate_tree_visual(tree_structure, max_depth)
+            elif format == "dag":
+                tree_visual = self._generate_dag_visual(tree_structure)
+            else:  # json
+                tree_visual = tree_structure
+            
+            return {
+                "format": format,
+                "environment_filter": environment,
+                "total_resources": len(resources_data),
+                "tree_structure": tree_structure,
+                "visual_representation": tree_visual,
+                "metadata": {
+                    "include_dependencies": include_dependencies,
+                    "max_depth": max_depth,
+                    "command_used": " ".join(find_command),
+                    "generated_at": datetime.now().isoformat(),
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to draw resource tree: {e}")
+            raise
+
+    def _parse_find_output(self, output: str) -> List[Dict[str, Any]]:
+        """Parse the output from terragrunt find command."""
+        resources = []
+        lines = output.strip().split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            
+            # Parse different output formats
+            if '/' in line:
+                # Path-based resource
+                path_components = parse_terragrunt_path(f"live/{line}")
+                resource = {
+                    "path": line,
+                    "name": path_components.get("resource_name") or path_components.get("resource_type", "unknown"),
+                    "type": path_components.get("resource_type", "unknown"),
+                    "environment": path_components.get("environment"),
+                    "region": path_components.get("region"),
+                    "account": path_components.get("account"),
+                    "project": path_components.get("project"),
+                    "dependencies": []
+                }
+                resources.append(resource)
+        
+        return resources
+
+    def _build_tree_structure(
+        self, 
+        resources_data: List[Dict[str, Any]], 
+        include_dependencies: bool,
+        max_depth: Optional[int]
+    ) -> Dict[str, Any]:
+        """Build hierarchical tree structure from resources data."""
+        tree = {
+            "root": {
+                "name": "Infrastructure",
+                "type": "root",
+                "children": {},
+                "level": 0
+            }
+        }
+        
+        # Group resources by hierarchy
+        for resource in resources_data:
+            path = resource.get("path", "")
+            path_parts = path.split('/')
+            
+            current_node = tree["root"]
+            current_level = 0
+            
+            # Build path hierarchy
+            for i, part in enumerate(path_parts):
+                if max_depth and current_level >= max_depth:
+                    break
+                
+                if part not in current_node["children"]:
+                    current_node["children"][part] = {
+                        "name": part,
+                        "type": "folder" if i < len(path_parts) - 1 else resource.get("type", "resource"),
+                        "children": {},
+                        "level": current_level + 1,
+                        "resource_data": resource if i == len(path_parts) - 1 else None,
+                        "dependencies": resource.get("dependencies", []) if include_dependencies else []
+                    }
+                
+                current_node = current_node["children"][part]
+                current_level += 1
+        
+        return tree
+
+    def _generate_tree_visual(self, tree_structure: Dict[str, Any], max_depth: Optional[int]) -> List[str]:
+        """Generate ASCII tree visualization."""
+        lines = []
+        
+        def render_node(node: Dict[str, Any], prefix: str = "", is_last: bool = True, level: int = 0):
+            if max_depth and level > max_depth:
+                return
+            
+            # Node symbol
+            if level == 0:
+                symbol = ""
+                name = node["name"]
+            else:
+                symbol = "└── " if is_last else "├── "
+                name = node["name"]
+            
+            # Add type and dependency info
+            type_info = f" ({node['type']})" if node.get("type") and node["type"] != "folder" else ""
+            dep_info = ""
+            if node.get("dependencies"):
+                dep_count = len(node["dependencies"])
+                dep_info = f" [deps: {dep_count}]"
+            
+            line = f"{prefix}{symbol}{name}{type_info}{dep_info}"
+            lines.append(line)
+            
+            # Render children
+            children = list(node.get("children", {}).items())
+            for i, (child_name, child_node) in enumerate(children):
+                is_child_last = i == len(children) - 1
+                child_prefix = prefix + ("    " if is_last else "│   ") if level > 0 else ""
+                render_node(child_node, child_prefix, is_child_last, level + 1)
+        
+        render_node(tree_structure["root"])
+        return lines
+
+    def _generate_dag_visual(self, tree_structure: Dict[str, Any]) -> List[str]:
+        """Generate DAG (Directed Acyclic Graph) visualization."""
+        lines = []
+        dependencies = []
+        
+        def collect_dependencies(node: Dict[str, Any], path: str = ""):
+            current_path = f"{path}/{node['name']}" if path else node['name']
+            
+            if node.get("dependencies"):
+                for dep in node["dependencies"]:
+                    dependencies.append(f"{dep} -> {current_path}")
+            
+            for child_name, child_node in node.get("children", {}).items():
+                collect_dependencies(child_node, current_path)
+        
+        collect_dependencies(tree_structure["root"])
+        
+        if dependencies:
+            lines.append("Dependency Graph:")
+            lines.append("=" * 50)
+            for dep in dependencies:
+                lines.append(f"  {dep}")
+        else:
+            lines.append("No dependencies found")
+        
+        return lines
+
+    async def get_dependency_graph(
+        self, 
+        environment: Optional[str] = None,
+        output_format: str = "dot"
+    ) -> Dict[str, Any]:
+        """Get dependency graph using Terragrunt CLI redesign.
+        
+        Args:
+            environment: Filter by environment
+            output_format: Output format ("dot", "json", "mermaid")
+        
+        Returns:
+            Dict containing dependency graph data
+        """
+        try:
+            env_vars = self._prepare_environment()
+            
+            # Use the new graph-dependencies equivalent command
+            if output_format == "json":
+                command = [self.binary_path, "find", "--dependencies", "--json"]
+            else:
+                command = [self.binary_path, "find", "--dependencies", "--dag"]
+            
+            exit_code, stdout, stderr, _ = await run_command(
+                command,
+                working_dir=self.root_path,
+                timeout=300,
+                env_vars=env_vars,
+            )
+            
+            if exit_code != 0:
+                raise Exception(f"Dependency graph command failed: {stderr}")
+            
+            # Parse output based on format
+            if output_format == "json":
+                try:
+                    import json
+                    graph_data = json.loads(stdout)
+                except json.JSONDecodeError:
+                    graph_data = {"nodes": [], "edges": [], "error": "Failed to parse JSON"}
+            elif output_format == "dot":
+                graph_data = self._convert_to_dot_format(stdout, environment)
+            elif output_format == "mermaid":
+                graph_data = self._convert_to_mermaid_format(stdout, environment)
+            else:
+                graph_data = {"raw_output": stdout}
+            
+            return {
+                "format": output_format,
+                "environment_filter": environment,
+                "graph_data": graph_data,
+                "command_used": " ".join(command),
+                "generated_at": datetime.now().isoformat(),
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get dependency graph: {e}")
+            raise
+
+    def _convert_to_dot_format(self, output: str, environment: Optional[str]) -> Dict[str, Any]:
+        """Convert output to DOT format for Graphviz."""
+        lines = ["digraph terragrunt_dependencies {"]
+        lines.append("  rankdir=TB;")
+        lines.append("  node [shape=box, style=rounded];")
+        
+        # Parse dependencies from output
+        dependencies = []
+        resources = set()
+        
+        for line in output.split('\n'):
+            line = line.strip()
+            if '->' in line or 'depends on' in line:
+                # Parse dependency relationships
+                if '->' in line:
+                    parts = line.split('->')
+                    if len(parts) == 2:
+                        source = parts[0].strip()
+                        target = parts[1].strip()
+                        dependencies.append((source, target))
+                        resources.add(source)
+                        resources.add(target)
+        
+        # Add nodes
+        for resource in resources:
+            if environment and environment not in resource:
+                continue
+            node_id = resource.replace('/', '_').replace('-', '_')
+            label = resource.split('/')[-1] if '/' in resource else resource
+            lines.append(f'  {node_id} [label="{label}"];')
+        
+        # Add edges
+        for source, target in dependencies:
+            if environment and (environment not in source or environment not in target):
+                continue
+            source_id = source.replace('/', '_').replace('-', '_')
+            target_id = target.replace('/', '_').replace('-', '_')
+            lines.append(f"  {source_id} -> {target_id};")
+        
+        lines.append("}")
+        
+        return {
+            "dot_content": '\n'.join(lines),
+            "nodes": list(resources),
+            "edges": dependencies
+        }
+
+    def _convert_to_mermaid_format(self, output: str, environment: Optional[str]) -> Dict[str, Any]:
+        """Convert output to Mermaid format for diagram visualization."""
+        lines = ["graph TD"]
+        
+        # Parse dependencies from output
+        dependencies = []
+        resources = set()
+        
+        for line in output.split('\n'):
+            line = line.strip()
+            if '->' in line or 'depends on' in line:
+                if '->' in line:
+                    parts = line.split('->')
+                    if len(parts) == 2:
+                        source = parts[0].strip()
+                        target = parts[1].strip()
+                        dependencies.append((source, target))
+                        resources.add(source)
+                        resources.add(target)
+        
+        # Generate Mermaid syntax
+        for source, target in dependencies:
+            if environment and (environment not in source or environment not in target):
+                continue
+            
+            # Clean names for Mermaid
+            source_clean = source.replace('/', '_').replace('-', '_')
+            target_clean = target.replace('/', '_').replace('-', '_')
+            source_label = source.split('/')[-1] if '/' in source else source
+            target_label = target.split('/')[-1] if '/' in target else target
+            
+            lines.append(f"  {source_clean}[{source_label}] --> {target_clean}[{target_label}]")
+        
+        return {
+            "mermaid_content": '\n'.join(lines),
+            "nodes": list(resources),
+            "edges": dependencies
+        } 

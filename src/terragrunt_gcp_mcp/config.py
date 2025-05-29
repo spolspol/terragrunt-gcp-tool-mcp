@@ -17,6 +17,27 @@ class GCPConfig(BaseModel):
     default_zone: str = "europe-west2-a"
 
 
+class TerragruntExperimentalConfig(BaseModel):
+    """Terragrunt experimental features configuration."""
+    
+    # Stacks feature configuration
+    stacks_enabled: bool = Field(default=True, description="Enable Terragrunt stacks experimental feature")
+    enhanced_dependency_resolution: bool = Field(default=True, description="Use enhanced dependency resolution")
+    parallel_execution: bool = Field(default=True, description="Enable parallel execution within stacks")
+    stack_outputs: bool = Field(default=True, description="Enable stack-level outputs")
+    recursive_stacks: bool = Field(default=False, description="Enable recursive stacks (experimental)")
+    
+    # Stack execution settings
+    max_parallel_units: int = Field(default=10, description="Maximum number of units to execute in parallel")
+    stack_timeout: int = Field(default=7200, description="Timeout for stack operations in seconds")
+    continue_on_error: bool = Field(default=False, description="Continue stack execution on unit errors")
+    
+    # Advanced experimental features
+    auto_retry: bool = Field(default=True, description="Automatically retry failed units")
+    max_retries: int = Field(default=3, description="Maximum number of retries for failed units")
+    retry_delay: int = Field(default=30, description="Delay between retries in seconds")
+
+
 class TerragruntConfig(BaseModel):
     """Terragrunt configuration settings."""
     
@@ -35,6 +56,9 @@ class TerragruntConfig(BaseModel):
     # Advanced settings
     max_retries: int = Field(default=3, description="Maximum number of retries for failed operations")
     retry_delay: int = Field(default=5, description="Delay between retries in seconds")
+    
+    # Experimental features
+    experimental: TerragruntExperimentalConfig = Field(default_factory=TerragruntExperimentalConfig)
 
 
 class SlackConfig(BaseModel):
@@ -56,6 +80,7 @@ class MonitoringConfig(BaseModel):
         "cost_increase_percent": 20.0,
         "deployment_duration_minutes": 30.0,
         "error_rate_percent": 5.0,
+        "stack_failure_rate_percent": 10.0,  # New threshold for stack failures
     })
 
 
@@ -114,11 +139,32 @@ class Config(BaseModel):
 
     def validate_paths(self) -> None:
         """Validate that required paths exist."""
-        if not os.path.exists(self.terragrunt.root_path):
-            raise ValueError(f"Terragrunt root path does not exist: {self.terragrunt.root_path}")
+        # Expand and validate Terragrunt root path
+        expanded_root_path = os.path.expandvars(os.path.expanduser(self.terragrunt.root_path))
+        if not os.path.exists(expanded_root_path):
+            raise ValueError(f"Terragrunt root path does not exist: {self.terragrunt.root_path} (expanded: {expanded_root_path})")
         
-        if self.gcp.credentials_path and not os.path.exists(self.gcp.credentials_path):
-            raise ValueError(f"GCP credentials path does not exist: {self.gcp.credentials_path}")
+        # Expand and validate GCP credentials path if specified
+        if self.gcp.credentials_path:
+            expanded_credentials_path = os.path.expandvars(os.path.expanduser(self.gcp.credentials_path))
+            if not os.path.exists(expanded_credentials_path):
+                raise ValueError(f"GCP credentials path does not exist: {self.gcp.credentials_path} (expanded: {expanded_credentials_path})")
+
+    def is_experimental_enabled(self, feature: str) -> bool:
+        """Check if a specific experimental feature is enabled."""
+        return getattr(self.terragrunt.experimental, feature, False)
+
+    def get_stack_config(self) -> Dict[str, Any]:
+        """Get stack-specific configuration for experimental features."""
+        return {
+            "enabled": self.terragrunt.experimental.stacks_enabled,
+            "max_parallel_units": self.terragrunt.experimental.max_parallel_units,
+            "timeout": self.terragrunt.experimental.stack_timeout,
+            "continue_on_error": self.terragrunt.experimental.continue_on_error,
+            "auto_retry": self.terragrunt.experimental.auto_retry,
+            "max_retries": self.terragrunt.experimental.max_retries,
+            "retry_delay": self.terragrunt.experimental.retry_delay,
+        }
 
 
 def get_config() -> Config:
