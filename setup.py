@@ -16,8 +16,8 @@ if requirements_file.exists():
 
 setup(
     name="terragrunt-gcp-mcp",
-    version="0.1.0",
-    description="MCP server tool for managing GCP infrastructure with Terragrunt",
+    version="0.2.0",
+    description="MCP server tool for managing GCP infrastructure with Terragrunt (CLI Redesign Compatible)",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Infrastructure Team",

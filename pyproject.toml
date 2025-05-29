@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "terragrunt-gcp-mcp"
-version = "0.1.0"
-description = "MCP server tool for managing GCP infrastructure with Terragrunt"
+version = "0.2.0"
+description = "MCP server tool for managing GCP infrastructure with Terragrunt (CLI Redesign Compatible)"
 authors = [
     {name = "Infrastructure Team", email = "infra@example.com"}
 ]

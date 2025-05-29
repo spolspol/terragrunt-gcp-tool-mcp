@@ -762,6 +762,339 @@ def init(ctx):
         sys.exit(1)
 
 
+@cli.command()
+@click.option(
+    "--dag", 
+    is_flag=True, 
+    help="Show dependency graph information"
+)
+@click.option(
+    "--json", 
+    "output_json",
+    is_flag=True, 
+    help="Output in JSON format"
+)
+@click.option(
+    "--dependencies", 
+    is_flag=True, 
+    help="Include dependency information"
+)
+@click.pass_context
+def find(ctx, dag: bool, output_json: bool, dependencies: bool):
+    """Find and discover Terragrunt configurations (replaces output-module-groups)."""
+    async def _find():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            manager = TerragruntManager(config)
+            
+            console.print("[blue]Finding Terragrunt configurations...[/blue]")
+            resources = await manager.discover_resources()
+            
+            if output_json:
+                import json
+                result = []
+                for resource in resources:
+                    item = {
+                        "type": "unit",
+                        "path": resource.path.replace("live/", ""),  # Remove live/ prefix for cleaner output
+                        "name": resource.name,
+                        "resource_type": resource.type.value,
+                        "environment": resource.environment
+                    }
+                    
+                    if dependencies and resource.dependencies:
+                        item["dependencies"] = [dep.replace("live/", "") for dep in resource.dependencies]
+                    
+                    result.append(item)
+                
+                console.print(json.dumps(result, indent=2))
+            else:
+                # Table format
+                table = Table(title="Terragrunt Units")
+                table.add_column("Path", style="cyan")
+                table.add_column("Name", style="magenta")
+                table.add_column("Type", style="green")
+                table.add_column("Environment", style="yellow")
+                if dependencies:
+                    table.add_column("Dependencies", style="blue")
+                
+                for resource in resources:
+                    row = [
+                        resource.path.replace("live/", ""),
+                        resource.name,
+                        resource.type.value,
+                        resource.environment
+                    ]
+                    if dependencies:
+                        deps = ", ".join([dep.replace("live/", "") for dep in resource.dependencies]) if resource.dependencies else "None"
+                        row.append(deps)
+                    
+                    table.add_row(*row)
+                
+                console.print(table)
+                console.print(f"\n[green]Found {len(resources)} units[/green]")
+                
+        except Exception as e:
+            console.print(f"[red]Error finding configurations: {e}[/red]")
+            sys.exit(1)
+    
+    asyncio.run(_find())
+
+
+@cli.command()
+@click.option(
+    "--dag", 
+    is_flag=True, 
+    help="Show dependency graph"
+)
+@click.option(
+    "--tree", 
+    is_flag=True, 
+    help="Show tree format"
+)
+@click.option(
+    "--environment", 
+    "-e", 
+    help="Filter by environment"
+)
+@click.pass_context
+def list_units(ctx, dag: bool, tree: bool, environment: Optional[str]):
+    """List Terragrunt units with dependency information (replaces graph-dependencies)."""
+    async def _list_units():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            manager = TerragruntManager(config)
+            
+            console.print("[blue]Listing Terragrunt units...[/blue]")
+            resources = await manager.discover_resources(environment)
+            
+            if tree:
+                # Build dependency tree
+                console.print(f"[yellow]Dependency Tree{f' ({environment})' if environment else ''}:[/yellow]")
+                
+                # Find root nodes (no dependencies)
+                root_nodes = [r for r in resources if not r.dependencies]
+                
+                def print_tree(resource, level=0, visited=None):
+                    if visited is None:
+                        visited = set()
+                    
+                    if resource.path in visited:
+                        return
+                    visited.add(resource.path)
+                    
+                    indent = "  " * level
+                    prefix = "├── " if level > 0 else ""
+                    console.print(f"{indent}{prefix}{resource.name} ({resource.type.value})")
+                    
+                    # Find dependents
+                    dependents = [r for r in resources if resource.path in r.dependencies]
+                    for dependent in dependents:
+                        print_tree(dependent, level + 1, visited)
+                
+                if root_nodes:
+                    for root in root_nodes:
+                        print_tree(root)
+                else:
+                    console.print("No clear dependency hierarchy found")
+            
+            elif dag:
+                # Show DAG information
+                console.print(f"[yellow]Dependency Graph{f' ({environment})' if environment else ''}:[/yellow]")
+                
+                for resource in resources:
+                    if resource.dependencies:
+                        console.print(f"{resource.name} depends on:")
+                        for dep in resource.dependencies:
+                            dep_resource = next((r for r in resources if r.path == dep), None)
+                            dep_name = dep_resource.name if dep_resource else dep
+                            console.print(f"  - {dep_name}")
+                    else:
+                        console.print(f"{resource.name} (no dependencies)")
+            
+            else:
+                # Simple list
+                table = Table(title=f"Terragrunt Units{f' ({environment})' if environment else ''}")
+                table.add_column("Name", style="cyan")
+                table.add_column("Type", style="magenta")
+                table.add_column("Environment", style="green")
+                table.add_column("Dependencies", style="yellow")
+                
+                for resource in resources:
+                    deps_count = len(resource.dependencies) if resource.dependencies else 0
+                    table.add_row(
+                        resource.name,
+                        resource.type.value,
+                        resource.environment,
+                        str(deps_count)
+                    )
+                
+                console.print(table)
+                console.print(f"\n[green]Found {len(resources)} units[/green]")
+                
+        except Exception as e:
+            console.print(f"[red]Error listing units: {e}[/red]")
+            sys.exit(1)
+    
+    asyncio.run(_list_units())
+
+
+@cli.command()
+@click.option(
+    "--format", 
+    "-f", 
+    type=click.Choice(["dot", "json"]), 
+    default="dot", 
+    help="Output format for the graph"
+)
+@click.option(
+    "--environment", 
+    "-e", 
+    help="Filter by environment"
+)
+@click.pass_context
+def dag_graph(ctx, format: str, environment: Optional[str]):
+    """Generate dependency graph (replaces graph-dependencies command)."""
+    async def _dag_graph():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            manager = TerragruntManager(config)
+            
+            console.print("[blue]Generating dependency graph...[/blue]")
+            resources = await manager.discover_resources(environment)
+            
+            if format == "json":
+                import json
+                graph_data = {
+                    "nodes": [],
+                    "edges": []
+                }
+                
+                for resource in resources:
+                    graph_data["nodes"].append({
+                        "id": resource.path,
+                        "name": resource.name,
+                        "type": resource.type.value,
+                        "environment": resource.environment
+                    })
+                    
+                    for dep in resource.dependencies:
+                        graph_data["edges"].append({
+                            "from": dep,
+                            "to": resource.path
+                        })
+                
+                console.print(json.dumps(graph_data, indent=2))
+            
+            else:  # dot format
+                console.print("digraph terragrunt_dependencies {")
+                console.print("  rankdir=TB;")
+                console.print("  node [shape=box];")
+                
+                for resource in resources:
+                    node_id = resource.path.replace("/", "_").replace("-", "_")
+                    console.print(f'  {node_id} [label="{resource.name}\\n({resource.type.value})"];')
+                
+                for resource in resources:
+                    node_id = resource.path.replace("/", "_").replace("-", "_")
+                    for dep in resource.dependencies:
+                        dep_id = dep.replace("/", "_").replace("-", "_")
+                        console.print(f"  {dep_id} -> {node_id};")
+                
+                console.print("}")
+                
+        except Exception as e:
+            console.print(f"[red]Error generating graph: {e}[/red]")
+            sys.exit(1)
+    
+    asyncio.run(_dag_graph())
+
+
+@cli.command()
+@click.argument("terragrunt_command")
+@click.option(
+    "--environment", 
+    "-e", 
+    help="Filter by environment"
+)
+@click.option(
+    "--dry-run", 
+    is_flag=True, 
+    help="Show what would be executed without running"
+)
+@click.option(
+    "--parallelism", 
+    type=int, 
+    help="Number of parallel executions"
+)
+@click.pass_context
+def run_all(ctx, terragrunt_command: str, environment: Optional[str], dry_run: bool, parallelism: Optional[int]):
+    """Run a Terragrunt command across all units (uses 'run --all' internally)."""
+    async def _run_all():
+        try:
+            config_path = ctx.obj.get("config_path")
+            if config_path:
+                config = Config.load_from_file(config_path)
+            else:
+                config = Config.load_from_file()
+            manager = TerragruntManager(config)
+            
+            console.print(f"[blue]Running '{terragrunt_command}' across all units{f' in {environment}' if environment else ''}...[/blue]")
+            
+            if dry_run:
+                resources = await manager.discover_resources(environment)
+                console.print(f"[yellow]Would execute '{terragrunt_command}' on {len(resources)} units:[/yellow]")
+                for resource in resources:
+                    console.print(f"  - {resource.name} ({resource.path})")
+                return
+            
+            # Build the command using new CLI structure
+            command = ["run", "--all", terragrunt_command]
+            if parallelism:
+                command.extend(["--terragrunt-parallelism", str(parallelism)])
+            
+            # Execute the command from the terragrunt root
+            from .utils import run_command
+            env_vars = manager._prepare_environment()
+            
+            console.print(f"[blue]Executing: terragrunt {' '.join(command)}[/blue]")
+            
+            exit_code, stdout, stderr, execution_time = await run_command(
+                [manager.binary_path] + command,
+                working_dir=manager.root_path,
+                timeout=config.terragrunt.timeout * 2,  # Double timeout for run-all
+                env_vars=env_vars,
+            )
+            
+            if exit_code == 0:
+                console.print(f"[green]✅ Command completed successfully in {execution_time:.2f}s[/green]")
+                if stdout:
+                    console.print(f"\n[yellow]Output:[/yellow]\n{stdout}")
+            else:
+                console.print(f"[red]❌ Command failed with exit code {exit_code}[/red]")
+                if stderr:
+                    console.print(f"\n[red]Error:[/red]\n{stderr}")
+                sys.exit(1)
+                
+        except Exception as e:
+            console.print(f"[red]Error running command across all units: {e}[/red]")
+            sys.exit(1)
+    
+    asyncio.run(_run_all())
+
+
 def main():
     """Main entry point."""
     cli()

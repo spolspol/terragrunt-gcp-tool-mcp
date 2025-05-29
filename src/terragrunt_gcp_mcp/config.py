@@ -26,6 +26,15 @@ class TerragruntConfig(BaseModel):
     cache_dir: str = ".terragrunt-cache"
     parallelism: int = 10
     timeout: int = 3600  # seconds
+    
+    # New CLI redesign settings
+    backend_bootstrap: bool = Field(default=True, description="Enable automatic backend resource provisioning")
+    non_interactive: bool = Field(default=True, description="Run in non-interactive mode")
+    use_run_command: bool = Field(default=True, description="Use 'run' command prefix for Terragrunt operations")
+    
+    # Advanced settings
+    max_retries: int = Field(default=3, description="Maximum number of retries for failed operations")
+    retry_delay: int = Field(default=5, description="Delay between retries in seconds")
 
 
 class SlackConfig(BaseModel):

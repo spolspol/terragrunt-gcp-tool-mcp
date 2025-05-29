@@ -16,6 +16,15 @@ terragrunt:
   cache_dir: ".terragrunt-cache"
   parallelism: 10
   timeout: 3600  # 1 hour timeout
+  
+  # New CLI redesign settings
+  backend_bootstrap: true     # Enable automatic backend resource provisioning
+  non_interactive: true       # Run in non-interactive mode (uses TG_NON_INTERACTIVE)
+  use_run_command: true       # Use 'run' command prefix for operations
+  
+  # Advanced settings
+  max_retries: 3              # Maximum retries for failed operations
+  retry_delay: 5              # Delay between retries in seconds
 
 # Slack Configuration (optional)
 slack:

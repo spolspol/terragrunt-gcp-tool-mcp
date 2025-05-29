@@ -28,6 +28,13 @@ A Model Context Protocol (MCP) server tool for managing Google Cloud Platform in
 - **Template Management**: Create and manage infrastructure templates
 - **Cost Analysis**: Monitor and optimize infrastructure costs
 
+### Terragrunt CLI Redesign Support
+- **New Command Structure**: Uses the latest Terragrunt CLI redesign with `run` commands
+- **Environment Variables**: Updated to use `TG_` prefixed environment variables
+- **Backend Bootstrap**: Automatic backend resource provisioning with `--backend-bootstrap`
+- **Dependency Discovery**: Enhanced dependency graph analysis with `find` and `list` commands
+- **Run All Operations**: Support for `run --all` commands across multiple units
+
 ## Installation
 
 ```bash
@@ -175,6 +182,20 @@ python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml validate-resource 
 
 # Get validation results in JSON format
 python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml validate-resource "web-server-01" --format json
+
+# New CLI redesign commands
+# Find and discover Terragrunt configurations (replaces output-module-groups)
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml find --dag --json --dependencies
+
+# List units with dependency information (replaces graph-dependencies)
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml list-units --dag --tree
+
+# Generate dependency graph
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml dag-graph --format json
+
+# Run commands across all units (uses 'run --all' internally)
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml run-all plan --environment test-dev
+python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml run-all apply --dry-run
 ```
 
 #### MCP Usage

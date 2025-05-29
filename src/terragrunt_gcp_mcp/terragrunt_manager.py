@@ -74,6 +74,14 @@ class TerragruntManager:
             env_vars["GOOGLE_ZONE"] = self.config.gcp.default_zone
             env_vars["GOOGLE_CLOUD_ZONE"] = self.config.gcp.default_zone
         
+        # New Terragrunt CLI redesign environment variables (TG_ prefix)
+        env_vars["TG_NON_INTERACTIVE"] = "true"  # Replaces TERRAGRUNT_NON_INTERACTIVE
+        env_vars["TG_BACKEND_BOOTSTRAP"] = "true"  # Enable automatic backend provisioning
+        
+        # Set parallelism and other Terragrunt-specific settings
+        if hasattr(self.config.terragrunt, 'parallelism'):
+            env_vars["TG_PARALLELISM"] = str(self.config.terragrunt.parallelism)
+        
         return env_vars
 
     async def discover_resources(self, environment: Optional[str] = None) -> List[Resource]:
@@ -185,7 +193,7 @@ class TerragruntManager:
         try:
             env_vars = self._prepare_environment()
             exit_code, stdout, stderr, _ = await run_command(
-                [self.binary_path, "state", "list"],
+                [self.binary_path, "run", "state", "list"],  # Updated to use 'run state'
                 working_dir=full_path,
                 timeout=60,
                 env_vars=env_vars,
@@ -313,8 +321,8 @@ class TerragruntManager:
         try:
             env_vars = self._prepare_environment()
             exit_code, stdout, stderr, _ = await run_command(
-                [self.binary_path, "validate"],
-                working_dir=full_path,  # Run from the resource directory
+                [self.binary_path, "run", "validate"],
+                working_dir=full_path,
                 timeout=300,
                 env_vars=env_vars,
             )
@@ -347,9 +355,12 @@ class TerragruntManager:
         
         # Run plan - from the resource directory
         try:
-            plan_args = [self.binary_path, "plan"]
+            plan_args = [self.binary_path, "run", "plan"]  # Updated to use 'run plan'
             if not dry_run:
                 plan_args.extend(["-out=tfplan"])
+            
+            # Add backend bootstrap flag for automatic backend provisioning
+            plan_args.append("--backend-bootstrap")
             
             env_vars = self._prepare_environment()
             exit_code, stdout, stderr, _ = await run_command(
@@ -396,7 +407,7 @@ class TerragruntManager:
         await self._ensure_initialized(full_path)
         
         # Prepare command
-        command = [self.binary_path, "apply"]
+        command = [self.binary_path, "run", "apply"]  # Updated to use 'run apply'
         if plan_file:
             # If plan_file is relative, make it relative to the resource directory
             if not os.path.isabs(plan_file):
@@ -409,6 +420,9 @@ class TerragruntManager:
                 command.append(plan_file)
         else:
             command.append("-auto-approve")
+        
+        # Add backend bootstrap flag for automatic backend provisioning
+        command.append("--backend-bootstrap")
         
         # Run apply - from the resource directory
         try:
@@ -445,7 +459,7 @@ class TerragruntManager:
         try:
             env_vars = self._prepare_environment()
             exit_code, stdout, stderr, execution_time = await run_command(
-                [self.binary_path, "destroy", "-auto-approve"],
+                [self.binary_path, "run", "destroy", "-auto-approve", "--backend-bootstrap"],  # Updated to use 'run destroy'
                 working_dir=full_path,  # Run from the resource directory
                 timeout=self.config.terragrunt.timeout,
                 env_vars=env_vars,
@@ -456,7 +470,7 @@ class TerragruntManager:
                 stdout=stdout,
                 stderr=stderr,
                 execution_time=execution_time,
-                command="terragrunt destroy -auto-approve",
+                command="terragrunt run destroy -auto-approve --backend-bootstrap",  # Updated command string
                 working_dir=full_path,
             )
             
@@ -474,7 +488,7 @@ class TerragruntManager:
             
             env_vars = self._prepare_environment()
             exit_code, stdout, stderr, _ = await run_command(
-                [self.binary_path, "init"],
+                [self.binary_path, "run", "init", "--backend-bootstrap"],  # Updated to use 'run init'
                 working_dir=resource_path,  # Run from the resource directory
                 timeout=600,
                 env_vars=env_vars,
@@ -495,7 +509,7 @@ class TerragruntManager:
             env_vars = self._prepare_environment()
             # Get state list - run from the resource directory
             exit_code, stdout, stderr, _ = await run_command(
-                [self.binary_path, "state", "list"],
+                [self.binary_path, "run", "state", "list"],  # Updated to use 'run state'
                 working_dir=full_path,  # Run from the resource directory
                 timeout=60,
                 env_vars=env_vars,
@@ -511,7 +525,7 @@ class TerragruntManager:
             for resource in resources[:5]:  # Limit to first 5 resources
                 try:
                     exit_code, detail_stdout, _, _ = await run_command(
-                        [self.binary_path, "state", "show", resource],
+                        [self.binary_path, "run", "state", "show", resource],  # Updated to use 'run state'
                         working_dir=full_path,  # Run from the resource directory
                         timeout=30,
                         env_vars=env_vars,
@@ -544,8 +558,9 @@ class TerragruntManager:
         if not os.path.exists(full_path):
             raise Exception(f"Resource directory does not exist: {full_path}")
         
-        # Prepend terragrunt binary
-        full_command = [self.binary_path] + command
+        # Prepend terragrunt binary and 'run' for custom commands
+        # For commands that don't have shortcuts, we need to use 'run' explicitly
+        full_command = [self.binary_path, "run"] + command
         
         try:
             env_vars = self._prepare_environment()
