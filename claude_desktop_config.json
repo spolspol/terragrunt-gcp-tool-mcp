@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "terragrunt-gcp": {
+      "command": "python3",
+      "args": [
+        "/Users/spol/Desktop/GIT/INTI/terragrunt-gcp-tool-mcp/run_server.py",
+        "/Users/spol/Desktop/GIT/INTI/terragrunt-gcp-tool-mcp/config/config.yaml"
+      ],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/your/gcp-credentials.json"
+      }
+    }
+  }
+} 

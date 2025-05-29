@@ -1,3 +1,63 @@
+Metadata-Version: 2.4
+Name: terragrunt-gcp-mcp
+Version: 0.1.0
+Summary: MCP server tool for managing GCP infrastructure with Terragrunt
+Home-page: https://github.com/your-org/terragrunt-gcp-tool-mcp
+Author: Infrastructure Team
+Author-email: Infrastructure Team <infra@example.com>
+License: GPL-3.0
+Project-URL: Homepage, https://github.com/organization/terragrunt-gcp-tool-mcp
+Project-URL: Repository, https://github.com/organization/terragrunt-gcp-tool-mcp
+Project-URL: Documentation, https://github.com/organization/terragrunt-gcp-tool-mcp/docs
+Project-URL: Bug Tracker, https://github.com/organization/terragrunt-gcp-tool-mcp/issues
+Keywords: mcp,terragrunt,terraform,gcp,infrastructure,iac
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU General Public License v3 (GPLv3)
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: System :: Systems Administration
+Classifier: Topic :: Internet :: WWW/HTTP :: HTTP Servers
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE.md
+Requires-Dist: mcp>=0.4.0
+Requires-Dist: fastmcp>=0.2.0
+Requires-Dist: google-cloud-core>=2.4.1
+Requires-Dist: google-cloud-storage>=2.10.0
+Requires-Dist: google-cloud-compute>=1.15.0
+Requires-Dist: google-cloud-resource-manager>=1.10.4
+Requires-Dist: google-cloud-billing>=1.12.2
+Requires-Dist: google-cloud-monitoring>=2.16.0
+Requires-Dist: google-cloud-logging>=3.8.0
+Requires-Dist: google-auth>=2.23.4
+Requires-Dist: pyyaml>=6.0.1
+Requires-Dist: requests>=2.31.0
+Requires-Dist: click>=8.1.7
+Requires-Dist: rich>=13.7.0
+Requires-Dist: python-dateutil>=2.8.2
+Requires-Dist: jinja2>=3.1.2
+Requires-Dist: gitpython>=3.1.40
+Requires-Dist: psutil>=5.9.6
+Requires-Dist: pydantic>=2.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4.3; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21.1; extra == "dev"
+Requires-Dist: pytest-cov>=4.1.0; extra == "dev"
+Requires-Dist: black>=23.11.0; extra == "dev"
+Requires-Dist: isort>=5.12.0; extra == "dev"
+Requires-Dist: flake8>=6.1.0; extra == "dev"
+Requires-Dist: mypy>=1.7.1; extra == "dev"
+Requires-Dist: pre-commit>=3.5.0; extra == "dev"
+Dynamic: author
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-python
+
 # Terragrunt GCP MCP Tool
 
 A Model Context Protocol (MCP) server tool for managing Google Cloud Platform infrastructure using Terragrunt. This tool provides intelligent automation and management capabilities for the terragrunt-gcp-org-automation codebase.
@@ -135,18 +195,14 @@ The MCP server provides these tools:
 
 #### Resource Management
 - `list_resources` - List all resources in the infrastructure
-- `get_resource` - Get detailed information about a specific resource (deprecated, use get_resource_details)
-- `get_resource_details` - Get comprehensive information about a specific resource including attributes, state, and configuration
-- `validate_resource_config` - Validate a Terragrunt resource configuration with dependency checking
+- `get_resource` - Get detailed information about a specific resource
 - `create_resource` - Create a new infrastructure resource
 - `update_resource` - Update an existing resource configuration
 - `delete_resource` - Delete a resource (with dependency checking)
 
 #### Deployment Operations
-- `plan_deployment` - Generate deployment plan for changes (deprecated, use plan_resource_deployment)
-- `plan_resource_deployment` - Generate a comprehensive deployment plan for a Terragrunt resource
-- `deploy_resources` - Deploy infrastructure changes (deprecated, use apply_resource_deployment)
-- `apply_resource_deployment` - Apply changes to a Terragrunt resource with safety checks
+- `plan_deployment` - Generate deployment plan for changes
+- `deploy_resources` - Deploy infrastructure changes
 - `check_deployment_status` - Check status of ongoing deployments
 - `rollback_deployment` - Rollback a failed deployment
 
@@ -163,127 +219,6 @@ The MCP server provides these tools:
 
 ## Examples
 
-### Validating Resources
-
-#### CLI Usage
-```bash
-# Validate a resource with dependency checking
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml validate-resource "web-server-01"
-
-# Validate without checking dependencies
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml validate-resource "web-server-01" --no-check-dependencies
-
-# Get validation results in JSON format
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml validate-resource "web-server-01" --format json
-```
-
-#### MCP Usage
-```python
-# Example: Validate a resource configuration
-result = validate_resource_config(
-    resource_path="live/dev-account/test-dev/dev-99/europe-west2/compute/web-server-01",
-    check_dependencies=True
-)
-```
-
-### Planning Deployments
-
-#### CLI Usage
-```bash
-# Generate a deployment plan (dry-run by default)
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml plan-deployment "web-server-01"
-
-# Generate a plan and save it for later use
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml plan-deployment "web-server-01" --save-plan
-
-# Get plan results in JSON format
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml plan-deployment "web-server-01" --format json
-```
-
-#### MCP Usage
-```python
-# Example: Generate a deployment plan
-result = plan_resource_deployment(
-    resource_path="live/dev-account/test-dev/dev-99/europe-west2/compute/web-server-01",
-    dry_run=True,
-    save_plan=True
-)
-```
-
-### Applying Deployments
-
-#### CLI Usage
-```bash
-# Apply deployment with confirmation prompt
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml apply-deployment "web-server-01"
-
-# Apply deployment with auto-approval (bypasses validation)
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml apply-deployment "web-server-01" --auto-approve
-
-# Apply using a specific plan file
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml apply-deployment "web-server-01" --plan-file "tfplan"
-
-# Apply without notifications
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml apply-deployment "web-server-01" --no-notify
-```
-
-#### MCP Usage
-```python
-# Example: Apply deployment with safety checks
-result = apply_resource_deployment(
-    resource_path="live/dev-account/test-dev/dev-99/europe-west2/compute/web-server-01",
-    auto_approve=False,
-    plan_file=None,
-    notify_on_completion=True
-)
-```
-
-### Complete Workflow Example
-
-#### CLI Workflow
-```bash
-# 1. Validate the resource first
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml validate-resource "web-server-01"
-
-# 2. Generate and review the deployment plan
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml plan-deployment "web-server-01" --save-plan
-
-# 3. Apply the deployment
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml apply-deployment "web-server-01"
-```
-
-#### MCP Workflow
-```python
-# Complete deployment workflow via MCP
-# 1. Validate
-validation = validate_resource_config("web-server-01", check_dependencies=True)
-
-# 2. Plan
-if validation.success:
-    plan = plan_resource_deployment("web-server-01", dry_run=True, save_plan=True)
-    
-    # 3. Apply
-    if plan.success and plan.data["plan"]["changes_summary"]["has_changes"]:
-        deployment = apply_resource_deployment(
-            "web-server-01", 
-            auto_approve=False, 
-            notify_on_completion=True
-        )
-```
-
-### Querying Individual Resources
-
-```bash
-# Get detailed information about a specific resource
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml get-resource "web-server-01"
-
-# Get resource info with full configuration
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml get-resource "live/dev-account/test-dev/dev-99/europe-west2/compute/web-server-01" --include-config
-
-# Get resource info in JSON format
-python3 -m terragrunt_gcp_mcp.cli --config config/config.yaml get-resource "sftp-worker-01" --format json
-```
-
 ### Creating a New Compute Instance
 
 ```python
@@ -298,16 +233,6 @@ result = create_resource(
         "disk_size_gb": 50,
         "tags": ["web-server", "api"]
     }
-)
-```
-
-### Getting Resource Details via MCP
-
-```python
-# Example: Get detailed resource information
-result = get_resource_details(
-    resource_path="live/dev-account/test-dev/dev-99/europe-west2/compute/web-server-01",
-    include_configuration=True
 )
 ```
 

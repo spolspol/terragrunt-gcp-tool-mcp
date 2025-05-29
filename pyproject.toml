@@ -1,0 +1,145 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "terragrunt-gcp-mcp"
+version = "0.1.0"
+description = "MCP server tool for managing GCP infrastructure with Terragrunt"
+authors = [
+    {name = "Infrastructure Team", email = "infra@example.com"}
+]
+readme = "README.md"
+license = {text = "GPL-3.0"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+]
+keywords = ["mcp", "terragrunt", "terraform", "gcp", "infrastructure", "iac"]
+
+dependencies = [
+    "mcp>=0.4.0",
+    "fastmcp>=0.2.0",
+    "google-cloud-core>=2.4.1",
+    "google-cloud-storage>=2.10.0",
+    "google-cloud-compute>=1.15.0",
+    "google-cloud-resource-manager>=1.10.4",
+    "google-cloud-billing>=1.12.2",
+    "google-cloud-monitoring>=2.16.0",
+    "google-cloud-logging>=3.8.0",
+    "google-auth>=2.23.4",
+    "pyyaml>=6.0.1",
+    "requests>=2.31.0",
+    "click>=8.1.7",
+    "rich>=13.7.0",
+    "python-dateutil>=2.8.2",
+    "jinja2>=3.1.2",
+    "gitpython>=3.1.40",
+    "psutil>=5.9.6",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "pytest-cov>=4.1.0",
+    "black>=23.11.0",
+    "isort>=5.12.0",
+    "flake8>=6.1.0",
+    "mypy>=1.7.1",
+    "pre-commit>=3.5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/organization/terragrunt-gcp-tool-mcp"
+Repository = "https://github.com/organization/terragrunt-gcp-tool-mcp"
+Documentation = "https://github.com/organization/terragrunt-gcp-tool-mcp/docs"
+"Bug Tracker" = "https://github.com/organization/terragrunt-gcp-tool-mcp/issues"
+
+[project.scripts]
+terragrunt-gcp-mcp = "terragrunt_gcp_mcp.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+terragrunt_gcp_mcp = ["templates/**/*", "config/**/*"]
+
+[tool.black]
+line-length = 88
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["terragrunt_gcp_mcp"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --cov=terragrunt_gcp_mcp --cov-report=term-missing"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["src/terragrunt_gcp_mcp"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+] 

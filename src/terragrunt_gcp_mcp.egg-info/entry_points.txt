@@ -1,0 +1,2 @@
+[console_scripts]
+terragrunt-gcp-mcp = terragrunt_gcp_mcp.cli:main

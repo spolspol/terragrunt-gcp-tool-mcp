@@ -1,0 +1,43 @@
+# Example configuration for Terragrunt GCP MCP Tool
+# Copy this file to config.yaml and update with your settings
+
+# GCP Configuration
+gcp:
+  project_id: "bf-100-dev"
+  credentials_path: "$HOME/Documents/bf-100-dev-694ee8483dfc.json"  # Optional, can use ADC instead
+  default_region: "europe-west2"
+  default_zone: "europe-west2-a"
+
+# Terragrunt Configuration
+terragrunt:
+  root_path: "/Users/spol/Desktop/GIT/BF/tg-gcp-infra-live"  # Path to your terragrunt infrastructure
+  binary_path: "terragrunt"  # Path to terragrunt binary
+  terraform_binary: "tofu"   # OpenTofu binary
+  cache_dir: ".terragrunt-cache"
+  parallelism: 10
+  timeout: 3600  # 1 hour timeout
+
+# Slack Configuration (optional)
+slack:
+  webhook_url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+  default_channel: "#infrastructure"
+  username: "Terragrunt Bot"
+  icon_emoji: ":terraform:"
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+  check_interval: 300  # 5 minutes
+  max_retries: 3
+  alert_thresholds:
+    cost_increase_percent: 20.0
+    deployment_duration_minutes: 30.0
+    error_rate_percent: 5.0
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file_path: null  # Optional: "/var/log/terragrunt-gcp-mcp.log"
+  max_file_size: "10MB"
+  backup_count: 5 
