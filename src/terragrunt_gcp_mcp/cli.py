@@ -1700,80 +1700,67 @@ def visualize(ctx, environment: Optional[str], visualization_type: str, format: 
 @click.pass_context
 def get_autodevops_prompt(ctx, variant: str, format: str, output_file: Optional[str]):
     """Get AutoDevOps system prompt for LLM integration."""
-    try:
-        from .autodevops_prompt import get_system_prompt, create_autodevops_context
-        
-        if format == "context":
-            # Return full context information
-            context = create_autodevops_context()
-            context["system_prompt"] = get_system_prompt(variant)
+    async def _get_autodevops_prompt():
+        try:
+            from .autodevops_prompt import get_system_prompt, create_autodevops_context
             
-            if format == "json":
+            if format == "context":
+                # Return full context information
+                context = create_autodevops_context()
+                context["system_prompt"] = get_system_prompt(variant)
+                
+                if format == "json":
+                    import json
+                    output = json.dumps(context, indent=2)
+                else:
+                    output = f"""AutoDevOps Assistant Context:\nRole: {context['role']}\n\nCapabilities:\n{chr(10).join(f"- {cap}" for cap in context['capabilities'])}\n\nAvailable Tools:\n{chr(10).join(f"- {tool}" for tool in context['tools'])}\n\nSafety Principles:\n{chr(10).join(f"- {principle}" for principle in context['safety_principles'])}\n\nSystem Prompt ({variant}):\n{context['system_prompt']}"""
+            
+            elif format == "json":
                 import json
-                output = json.dumps(context, indent=2)
+                data = {
+                    "system_prompt": get_system_prompt(variant),
+                    "variant": variant,
+                    "role": "system",
+                    "purpose": "AutoDevOps Infrastructure Assistant",
+                    "integration_guide": {
+                        "claude_desktop": "Add this prompt to your Claude Desktop configuration",
+                        "api": "Include as system message in API calls",
+                        "cli": "Use with --system-prompt flag in CLI tools"
+                    },
+                    "character_count": len(get_system_prompt(variant)),
+                    "word_count": len(get_system_prompt(variant).split())
+                }
+                output = json.dumps(data, indent=2)
+            
+            else:  # text format
+                prompt = get_system_prompt(variant)
+                output = prompt
+            
+            # Output to file or console
+            if output_file:
+                with open(output_file, 'w') as f:
+                    f.write(output)
+                console.print(f"[green]✅ AutoDevOps {variant} system prompt saved to {output_file}[/green]")
+                
+                # Show stats
+                console.print(f"[cyan]Variant:[/cyan] {variant}")
+                console.print(f"[cyan]Format:[/cyan] {format}")
+                console.print(f"[cyan]Characters:[/cyan] {len(output)}")
+                console.print(f"[cyan]Words:[/cyan] {len(output.split())}")
             else:
-                output = f"""AutoDevOps Assistant Context:
-Role: {context['role']}
-
-Capabilities:
-{chr(10).join(f"- {cap}" for cap in context['capabilities'])}
-
-Available Tools:
-{chr(10).join(f"- {tool}" for tool in context['tools'])}
-
-Safety Principles:
-{chr(10).join(f"- {principle}" for principle in context['safety_principles'])}
-
-System Prompt ({variant}):
-{context['system_prompt']}"""
-        
-        elif format == "json":
-            import json
-            data = {
-                "system_prompt": get_system_prompt(variant),
-                "variant": variant,
-                "role": "system",
-                "purpose": "AutoDevOps Infrastructure Assistant",
-                "integration_guide": {
-                    "claude_desktop": "Add this prompt to your Claude Desktop configuration",
-                    "api": "Include as system message in API calls",
-                    "cli": "Use with --system-prompt flag in CLI tools"
-                },
-                "character_count": len(get_system_prompt(variant)),
-                "word_count": len(get_system_prompt(variant).split())
-            }
-            output = json.dumps(data, indent=2)
-        
-        else:  # text format
-            prompt = get_system_prompt(variant)
-            output = prompt
-        
-        # Output to file or console
-        if output_file:
-            with open(output_file, 'w') as f:
-                f.write(output)
-            console.print(f"[green]✅ AutoDevOps {variant} system prompt saved to {output_file}[/green]")
-            
-            # Show stats
-            console.print(f"[cyan]Variant:[/cyan] {variant}")
-            console.print(f"[cyan]Format:[/cyan] {format}")
-            console.print(f"[cyan]Characters:[/cyan] {len(output)}")
-            console.print(f"[cyan]Words:[/cyan] {len(output.split())}")
-        else:
-            console.print(output)
-            
-        # Show integration tips
-        if not output_file:
-            console.print(f"\n[yellow]💡 Integration Tips:[/yellow]")
-            console.print(f"[blue]• Claude Desktop:[/blue] Add as system message in MCP configuration")
-            console.print(f"[blue]• API Integration:[/blue] Use as 'system' role in conversation history")
-            console.print(f"[blue]• Save to file:[/blue] --output-file prompt.txt")
-            console.print(f"[blue]• Get JSON format:[/blue] --format json")
-            
-    except Exception as e:
-        console.print(f"[red]Error getting AutoDevOps prompt: {e}[/red]")
-        sys.exit(1)
-
+                console.print(output)
+                
+            # Show integration tips
+            if not output_file:
+                console.print(f"\n[yellow]💡 Integration Tips:[/yellow]")
+                console.print(f"[blue]• Claude Desktop:[/blue] Add as system message in MCP configuration")
+                console.print(f"[blue]• API Integration:[/blue] Use as 'system' role in conversation history")
+                console.print(f"[blue]• Save to file:[/blue] --output-file prompt.txt")
+                console.print(f"[blue]• Get JSON format:[/blue] --format json")
+                
+        except Exception as e:
+            console.print(f"[red]Error getting AutoDevOps prompt: {e}[/red]")
+            sys.exit(1)
     asyncio.run(_get_autodevops_prompt())
 
 
@@ -1789,7 +1776,7 @@ System Prompt ({variant}):
     "-p", 
     type=int, 
     default=30, 
-    help="Analysis period in days (default: 30)"
+    help="Analysis period in days (default: 30)"list resource
 )
 @click.option(
     "--format", 
