@@ -4,7 +4,7 @@ A Model Context Protocol server for managing GCP infrastructure with Terragrunt.
 Compatible with Terragrunt CLI Redesign.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.3"
 __author__ = "Infrastructure Team"
 __email__ = "infra@example.com"
 
