@@ -1,0 +1,73 @@
+{
+  "name": "terragrunt-gcp-mcp",
+  "version": "0.3.3",
+  "description": "MCP server for Terragrunt GCP infrastructure management with experimental features support",
+  "main": "index.js",
+  "scripts": {
+    "semantic-release": "semantic-release",
+    "commit": "git-cz",
+    "release": "semantic-release",
+    "release:dry": "semantic-release --dry-run",
+    "version": "echo $npm_package_version"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/terragrunt-gcp-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "terragrunt",
+    "gcp",
+    "infrastructure",
+    "automation",
+    "semantic-release",
+    "devops",
+    "cloud"
+  ],
+  "author": "Infrastructure Team",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/yourusername/terragrunt-gcp-mcp/issues"
+  },
+  "homepage": "https://github.com/yourusername/terragrunt-gcp-mcp#readme",
+  "devDependencies": {
+    "@commitlint/cli": "^18.4.3",
+    "@commitlint/config-conventional": "^18.4.3",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/exec": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^9.2.4",
+    "commitizen": "^4.3.0",
+    "conventional-changelog-conventionalcommits": "^7.0.2",
+    "cz-conventional-changelog": "^3.3.0",
+    "semantic-release": "^22.0.8"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "release": {
+    "branches": [
+      "main",
+      "master",
+      {
+        "name": "beta",
+        "prerelease": true
+      },
+      {
+        "name": "alpha",
+        "prerelease": true
+      }
+    ]
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+} 

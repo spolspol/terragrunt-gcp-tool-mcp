@@ -1,0 +1,308 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+      - beta
+      - alpha
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  validate-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate Conventional Commits
+        uses: wagoid/commitlint-github-action@v5
+        with:
+          configFile: '.commitlintrc.json'
+          failOnWarnings: false
+          helpURL: 'https://www.conventionalcommits.org/'
+
+  test-and-lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run linting
+        run: |
+          python -m black --check --diff src/ tests/
+          python -m isort --check-only --diff src/ tests/
+          python -m flake8 src/ tests/
+
+      - name: Run type checking
+        run: |
+          python -m mypy src/terragrunt_gcp_mcp/
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -v \
+            --cov=terragrunt_gcp_mcp \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --junitxml=pytest-results-${{ matrix.python-version }}.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pytest-results-${{ matrix.python-version }}
+          path: pytest-results-${{ matrix.python-version }}.xml
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety bandit[toml]
+
+      - name: Run safety check
+        run: |
+          safety check --json --output safety-report.json || true
+          safety check
+
+      - name: Run bandit security scan
+        run: |
+          bandit -r src/ -f json -o bandit-report.json || true
+          bandit -r src/
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            safety-report.json
+            bandit-report.json
+
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package
+        run: python -m twine check dist/*
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  docker-build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (test)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: terragrunt-gcp-mcp:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install semantic-release
+        run: |
+          npm install -g semantic-release@22 \
+            @semantic-release/changelog@6 \
+            @semantic-release/git@10 \
+            @semantic-release/github@9 \
+            @semantic-release/exec@6 \
+            conventional-changelog-conventionalcommits@7
+
+      - name: Check next version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx semantic-release --dry-run --no-ci > version-check.log 2>&1 || true
+          cat version-check.log
+          
+          # Extract version info if available
+          if grep -q "The next release version is" version-check.log; then
+            NEXT_VERSION=$(grep "The next release version is" version-check.log | sed 's/.*The next release version is //')
+            echo "Next version would be: $NEXT_VERSION"
+            echo "NEXT_VERSION=$NEXT_VERSION" >> $GITHUB_ENV
+          else
+            echo "No new version would be released"
+            echo "NEXT_VERSION=none" >> $GITHUB_ENV
+          fi
+
+      - name: Comment PR with version info
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const nextVersion = process.env.NEXT_VERSION;
+            let body = '## 🔍 Release Preview\n\n';
+            
+            if (nextVersion === 'none') {
+              body += '❌ **No new release** would be triggered by this PR.\n\n';
+              body += 'This usually means:\n';
+              body += '- No conventional commits found\n';
+              body += '- Only commits that don\'t trigger releases (docs, style, test, etc.)\n\n';
+              body += '💡 **Tip**: Use conventional commit format to trigger releases:\n';
+              body += '- `feat:` for new features (minor version)\n';
+              body += '- `fix:` for bug fixes (patch version)\n';
+              body += '- `feat!:` or `BREAKING CHANGE:` for breaking changes (major version)\n';
+            } else {
+              body += `🎉 **New release would be triggered**: \`${nextVersion}\`\n\n`;
+              body += '✅ This PR contains conventional commits that will trigger a release.\n';
+            }
+            
+            body += '\n---\n';
+            body += '*This comment is automatically generated by the PR validation workflow.*';
+            
+            // Find existing comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const existingComment = comments.data.find(comment => 
+              comment.user.type === 'Bot' && comment.body.includes('🔍 Release Preview')
+            );
+            
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: body
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+  pr-summary:
+    needs: [validate-commits, test-and-lint, security-scan, build-test, docker-build-test, version-check]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: PR Validation Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jobs = [
+              { name: 'Commit Validation', status: '${{ needs.validate-commits.result }}' },
+              { name: 'Test & Lint', status: '${{ needs.test-and-lint.result }}' },
+              { name: 'Security Scan', status: '${{ needs.security-scan.result }}' },
+              { name: 'Build Test', status: '${{ needs.build-test.result }}' },
+              { name: 'Docker Build Test', status: '${{ needs.docker-build-test.result }}' },
+              { name: 'Version Check', status: '${{ needs.version-check.result }}' }
+            ];
+            
+            const passed = jobs.filter(job => job.status === 'success').length;
+            const total = jobs.length;
+            
+            let summary = `## 📋 PR Validation Summary\n\n`;
+            summary += `**${passed}/${total} checks passed**\n\n`;
+            
+            jobs.forEach(job => {
+              const icon = job.status === 'success' ? '✅' : 
+                          job.status === 'failure' ? '❌' : 
+                          job.status === 'cancelled' ? '⏭️' : '⏳';
+              summary += `${icon} ${job.name}\n`;
+            });
+            
+            if (passed === total) {
+              summary += `\n🎉 **All checks passed!** This PR is ready for review.`;
+            } else {
+              summary += `\n⚠️ **Some checks failed.** Please review and fix the issues above.`;
+            }
+            
+            console.log(summary); 

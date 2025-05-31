@@ -1,0 +1,322 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+          - prepatch
+          - preminor
+          - premajor
+      prerelease_identifier:
+        description: 'Prerelease identifier (alpha, beta, rc)'
+        required: false
+        default: 'beta'
+        type: choice
+        options:
+          - alpha
+          - beta
+          - rc
+      custom_version:
+        description: 'Custom version (overrides release_type)'
+        required: false
+        type: string
+      skip_tests:
+        description: 'Skip tests and linting'
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: 'Dry run (no actual release)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  validate-inputs:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install packaging
+
+      - name: Determine version
+        id: version
+        run: |
+          python << 'EOF'
+          import re
+          import subprocess
+          from packaging import version as pkg_version
+          
+          # Get current version from git tags
+          try:
+              result = subprocess.run(['git', 'describe', '--tags', '--abbrev=0'], 
+                                    capture_output=True, text=True, check=True)
+              current_version = result.stdout.strip().lstrip('v')
+          except subprocess.CalledProcessError:
+              current_version = "0.0.0"
+          
+          print(f"Current version: {current_version}")
+          
+          custom_version = "${{ github.event.inputs.custom_version }}"
+          release_type = "${{ github.event.inputs.release_type }}"
+          prerelease_id = "${{ github.event.inputs.prerelease_identifier }}"
+          
+          if custom_version:
+              # Validate custom version
+              try:
+                  pkg_version.parse(custom_version)
+                  new_version = custom_version
+                  print(f"Using custom version: {new_version}")
+              except Exception as e:
+                  print(f"Invalid custom version: {custom_version}")
+                  exit(1)
+          else:
+              # Calculate new version based on release type
+              current = pkg_version.parse(current_version)
+              
+              if release_type == "patch":
+                  new_version = f"{current.major}.{current.minor}.{current.micro + 1}"
+              elif release_type == "minor":
+                  new_version = f"{current.major}.{current.minor + 1}.0"
+              elif release_type == "major":
+                  new_version = f"{current.major + 1}.0.0"
+              elif release_type == "prerelease":
+                  if current.pre:
+                      # Increment prerelease number
+                      pre_num = current.pre[1] + 1
+                      new_version = f"{current.major}.{current.minor}.{current.micro}-{current.pre[0]}.{pre_num}"
+                  else:
+                      new_version = f"{current.major}.{current.minor}.{current.micro}-{prerelease_id}.1"
+              elif release_type == "prepatch":
+                  new_version = f"{current.major}.{current.minor}.{current.micro + 1}-{prerelease_id}.1"
+              elif release_type == "preminor":
+                  new_version = f"{current.major}.{current.minor + 1}.0-{prerelease_id}.1"
+              elif release_type == "premajor":
+                  new_version = f"{current.major + 1}.0.0-{prerelease_id}.1"
+              
+              print(f"Calculated version: {new_version}")
+          
+          # Check if it's a prerelease
+          is_prerelease = "-" in new_version
+          
+          print(f"::set-output name=version::{new_version}")
+          print(f"::set-output name=is_prerelease::{str(is_prerelease).lower()}")
+          EOF
+
+      - name: Validate version increment
+        run: |
+          echo "New version: ${{ steps.version.outputs.version }}"
+          echo "Is prerelease: ${{ steps.version.outputs.is_prerelease }}"
+          echo "Dry run: ${{ github.event.inputs.dry_run }}"
+
+  pre-release-tests:
+    needs: validate-inputs
+    if: github.event.inputs.skip_tests != 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -v --cov=terragrunt_gcp_mcp --cov-report=xml
+
+      - name: Run linting
+        run: |
+          python -m black --check src/ tests/
+          python -m isort --check-only src/ tests/
+          python -m flake8 src/ tests/
+
+  manual-release:
+    needs: [validate-inputs, pre-release-tests]
+    if: always() && (needs.pre-release-tests.result == 'success' || github.event.inputs.skip_tests == 'true')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install build twine
+
+      - name: Update version files
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          python scripts/update_version.py "${{ needs.validate-inputs.outputs.version }}"
+
+      - name: Update version files (dry run)
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          python scripts/update_version.py "${{ needs.validate-inputs.outputs.version }}" --dry-run
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package
+        run: python -m twine check dist/*
+
+      - name: Create Git tag
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Commit version changes
+          git add pyproject.toml src/terragrunt_gcp_mcp/__init__.py
+          git commit -m "chore(release): ${{ needs.validate-inputs.outputs.version }} [skip ci]"
+          
+          # Create and push tag
+          git tag -a "v${{ needs.validate-inputs.outputs.version }}" -m "Release v${{ needs.validate-inputs.outputs.version }}"
+          git push origin main
+          git push origin "v${{ needs.validate-inputs.outputs.version }}"
+
+      - name: Create GitHub Release
+        if: github.event.inputs.dry_run != 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ needs.validate-inputs.outputs.version }}
+          release_name: Release v${{ needs.validate-inputs.outputs.version }}
+          body: |
+            ## Release v${{ needs.validate-inputs.outputs.version }}
+            
+            **Release Type:** ${{ github.event.inputs.release_type }}
+            **Triggered by:** @${{ github.actor }}
+            **Workflow:** Manual Release
+            
+            ### Changes
+            This is a manual release. Please see the commit history for detailed changes.
+            
+            ### Installation
+            ```bash
+            pip install terragrunt-gcp-mcp==${{ needs.validate-inputs.outputs.version }}
+            ```
+            
+            ### Docker
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ needs.validate-inputs.outputs.version }}
+            ```
+          draft: false
+          prerelease: ${{ needs.validate-inputs.outputs.is_prerelease }}
+
+      - name: Upload release assets
+        if: github.event.inputs.dry_run != 'true'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: dist/
+          asset_name: python-packages
+          asset_content_type: application/zip
+
+      - name: Publish to PyPI
+        if: github.event.inputs.dry_run != 'true' && needs.validate-inputs.outputs.is_prerelease != 'true'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: python -m twine upload dist/*
+
+      - name: Publish to Test PyPI (prerelease)
+        if: github.event.inputs.dry_run != 'true' && needs.validate-inputs.outputs.is_prerelease == 'true'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        run: python -m twine upload --repository testpypi dist/*
+
+      - name: Build and push Docker image
+        if: github.event.inputs.dry_run != 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ needs.validate-inputs.outputs.version }}
+            ghcr.io/${{ github.repository }}:latest
+          labels: |
+            org.opencontainers.image.title=${{ github.repository }}
+            org.opencontainers.image.description=Terragrunt GCP MCP Tool
+            org.opencontainers.image.version=${{ needs.validate-inputs.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Summary
+        run: |
+          echo "## 🎉 Manual Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.validate-inputs.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Release Type:** ${{ github.event.inputs.release_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Is Prerelease:** ${{ needs.validate-inputs.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Dry Run:** ${{ github.event.inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "🔍 **This was a dry run - no actual release was created**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **Release created successfully**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+            echo "- Check the [releases page](https://github.com/${{ github.repository }}/releases)" >> $GITHUB_STEP_SUMMARY
+            echo "- Verify package on [PyPI](https://pypi.org/project/terragrunt-gcp-mcp/)" >> $GITHUB_STEP_SUMMARY
+            echo "- Test the Docker image: \`docker pull ghcr.io/${{ github.repository }}:${{ needs.validate-inputs.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          fi 
