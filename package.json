@@ -31,16 +31,16 @@
   },
   "homepage": "https://github.com/yourusername/terragrunt-gcp-mcp#readme",
   "devDependencies": {
-    "@commitlint/cli": "^18.4.3",
-    "@commitlint/config-conventional": "^18.4.3",
-    "@semantic-release/changelog": "^6.0.3",
-    "@semantic-release/exec": "^6.0.3",
-    "@semantic-release/git": "^10.0.1",
-    "@semantic-release/github": "^9.2.4",
-    "commitizen": "^4.3.0",
-    "conventional-changelog-conventionalcommits": "^7.0.2",
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^11.0.1",
+    "@semantic-release/github": "^12.0.9",
+    "commitizen": "^4.3.2",
+    "conventional-changelog-conventionalcommits": "^10.4.0",
     "cz-conventional-changelog": "^3.3.0",
-    "semantic-release": "^22.0.8"
+    "semantic-release": "^25.0.9"
   },
   "config": {
     "commitizen": {
